@@ -124,11 +124,33 @@ async function openJoin(code) {
   S.joinMode = null;
   try {
     S.joinInfo = await api(`/api/rooms/${code}`);
+    if (await tryAutoJoin(S.joinInfo)) return;
     go('join', code);
   } catch (e) {
     toastErr(e);
     go('home');
   }
+}
+
+/**
+ * Returning players skip the join form: a family member this phone already knows, or anyone with a saved
+ * name, sits down straight away. Anything unusual (look-alike name, seat in use, full table) falls back to
+ * the normal join screen so nothing is decided for them.
+ */
+async function tryAutoJoin(info) {
+  const fam = info.family;
+  const mine = fam && entryFor(fam.code);
+  try {
+    if (mine?.memberId && fam.members.some(m => m.id === mine.memberId)) {
+      await joinAsMember(mine.memberId);
+      return true;
+    }
+    const name = (S.profile.name || '').trim();
+    if (!name) return false;
+    const res = await api(`/api/rooms/${S.code}/join`, { name, avatar: S.profile.avatar, token: store.get(sessionKey(S.code))?.token });
+    afterJoin(res);
+    return true;
+  } catch { return false; }
 }
 
 // ---------- live connection ----------
@@ -1248,9 +1270,17 @@ document.addEventListener('submit', async (e) => {
   try {
     switch (form.dataset.form) {
       case 'create': {
-        const famCode = S.createOpts.familyCode;
+        let famCode = S.createOpts.familyCode;
         let memberId = createAsMember()?.memberId || null;
         if (!createAsMember()) { S.profile.name = String(fd.get('name')).trim(); saveProfile(); }
+        if (!famCode && !myFamilies().some(f => f.key)) { // first table on this phone: open a Hall of Fame automatically
+          try {
+            const res = await api('/api/families', { name: t('autoFamilyName'), member: { name: S.profile.name, avatar: S.profile.avatar } });
+            saveFamilyEntry({ code: res.code, name: res.family.name, key: res.key, memberId: res.memberId, memberName: S.profile.name, memberAvatar: res.family.members[res.memberId].avatar });
+            famCode = S.createOpts.familyCode = res.code;
+            memberId = res.memberId;
+          } catch { /* no Hall of Fame this time: play a one-off table */ }
+        }
         if (famCode && !memberId) { // a new person for this family: check for look-alike names first
           memberId = await new Promise((resolve) => {
             const add = (force) => api(`/api/families/${famCode}/members`, { name: S.profile.name, avatar: S.profile.avatar, force, key: entryFor(famCode)?.key })
