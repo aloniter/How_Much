@@ -1,0 +1,10 @@
+# One-click deploy on Render (https://render.com) — free plan is enough for a dinner table.
+services:
+  - type: web
+    name: how-much
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    autoDeploy: true

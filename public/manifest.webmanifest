@@ -1,0 +1,9 @@
+{
+  "name": "How Much? — Guess the bill",
+  "short_name": "How Much?",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16120f",
+  "theme_color": "#16120f",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
