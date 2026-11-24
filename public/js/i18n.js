@@ -391,6 +391,8 @@ const en = {
     hostOnly: 'Only the host can do that', cannotRemove: 'Cannot remove that player', generic: 'Something went wrong',
     familyNotFound: 'No family with that code 🤔', memberNotFound: 'That family member no longer exists', badMerge: 'Pick two different people',
     tooLateFix: 'Too late to change this bill', badBackup: 'That file is not a CheckMate backup',
+    seatTaken: 'That player is already at the table on another phone', familyKey: 'Only family members can do that — join a family dinner on this phone first',
+    tooMany: 'Too many requests — slow down a little', busy: 'Busy, please try again',
   },
 };
 
@@ -785,6 +787,8 @@ const he = {
     hostOnly: 'זה רק בידיים של מי שפתח את השולחן', cannotRemove: 'אי אפשר להוציא מהשולחן', generic: 'משהו השתבש',
     familyNotFound: 'אין משפחה עם הקוד הזה 🤔', memberNotFound: 'הפרופיל הזה כבר לא קיים', badMerge: 'צריך לבחור שני פרופילים שונים',
     tooLateFix: 'מאוחר מדי לתקן את החשבון הזה', badBackup: 'זה לא קובץ גיבוי של CheckMate',
+    seatTaken: 'הכיסא הזה כבר תפוס בטלפון אחר', familyKey: 'רק בני המשפחה יכולים לעשות את זה — מצטרפים קודם לארוחה משפחתית מהטלפון הזה',
+    tooMany: 'יותר מדי בקשות — רגע, נושמים', busy: 'עמוס כרגע, נסו שוב',
   },
 };
 

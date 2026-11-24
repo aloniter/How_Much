@@ -1,0 +1,6 @@
+data
+test
+node_modules
+Dockerfile
+render.yaml
+*.log

@@ -15,7 +15,7 @@ const base = `http://127.0.0.1:${PORT}`;
 let proc;
 
 async function start() {
-  proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR }, stdio: 'ignore' });
+  proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR, RATE_LIMIT: '0' }, stdio: 'ignore' });
   for (let i = 0; i < 100; i++) {
     try { if ((await fetch(base + '/healthz')).ok) return; } catch { /* not up yet */ }
     await new Promise(r => setTimeout(r, 50));
@@ -48,9 +48,16 @@ test('a family plays several dinners; history is exact, deduplicated and survive
   const fam = (await post('/api/families', { name: 'The Cohens', member: { name: 'Mom', avatar: '🍷' } })).body;
   assert.match(fam.code, /^[A-Z]{6}$/);
   const momId = fam.memberId;
+  const key = fam.key;
+  assert.match(key, /^[0-9a-f]{32}$/);
+  assert.equal((await get(`/api/families/${fam.code}`)).key, undefined, 'the family key is never exposed');
+  // without the family key nobody can create family tables or change the family
+  assert.equal((await post('/api/rooms', { familyCode: fam.code, memberId: momId, title: 'x' })).status, 403);
+  assert.equal((await post(`/api/families/${fam.code}`, { name: 'Hacked' })).status, 403);
+  assert.equal((await post(`/api/families/${fam.code}`, { name: 'Hacked', key: 'f'.repeat(32) })).status, 403);
 
   // --- dinner 1: a family table
-  const host = (await post('/api/rooms', { familyCode: fam.code, memberId: momId, title: 'Pizza', currency: '₪' })).body;
+  const host = (await post('/api/rooms', { familyCode: fam.code, familyKey: key, memberId: momId, title: 'Pizza', currency: '₪' })).body;
   assert.equal(host.memberId, momId);
   const peek = await get(`/api/rooms/${host.code}`);
   assert.equal(peek.family.name, 'The Cohens');
@@ -58,6 +65,7 @@ test('a family plays several dinners; history is exact, deduplicated and survive
 
   const dad = (await post(`/api/rooms/${host.code}/join`, { name: 'Dad', avatar: '🥩' })).body;
   assert.ok(dad.memberId, 'a new name becomes a family member');
+  assert.equal(dad.familyKey, key, 'family members at a family table receive the family key');
   // "dad " from another phone looks like an existing member → asked "is this you?"
   const dup = await post(`/api/rooms/${host.code}/join`, { name: 'dad ', avatar: '🍔' });
   assert.equal(dup.status, 409);
@@ -85,6 +93,16 @@ test('a family plays several dinners; history is exact, deduplicated and survive
   assert.equal(rounds[0].actual, 402);
   assert.equal(Object.keys(rounds[0].guesses).length, 4);
   assert.equal(Object.values(rounds[0].guesses).filter(g => g.guest).length, 1);
+
+  // identity protection: while Dad's phone is online, nobody else can take over his seat
+  const ctrl = new AbortController();
+  await fetch(`${base}/api/rooms/${host.code}/events?pid=${dad.pid}&token=${dad.token}`, { signal: ctrl.signal });
+  await new Promise(r => setTimeout(r, 300));
+  const steal = await post(`/api/rooms/${host.code}/join`, { memberId: dad.memberId });
+  assert.equal(steal.status, 409);
+  assert.equal(steal.body.code, 'seatTaken');
+  assert.equal((await post(`/api/rooms/${host.code}/join`, { memberId: dad.memberId, token: dad.token })).status, 200, 'same phone can rejoin');
+  ctrl.abort();
 
   // reactions to a roast card are counted per round
   await post(`/api/rooms/${host.code}/react`, { ...seat(host.code, noa), emoji: '😂', target: dad.pid });
@@ -118,7 +136,7 @@ test('a family plays several dinners; history is exact, deduplicated and survive
   assert.equal((await get(`/api/rooms/${host.code}`)).code, host.code, 'tables survive restarts too');
 
   // --- dinner 2, a new table; Dad taps himself
-  const host2 = (await post('/api/rooms', { familyCode: fam.code, memberId: dad.memberId, title: 'Sushi', currency: '₪' })).body;
+  const host2 = (await post('/api/rooms', { familyCode: fam.code, familyKey: key, memberId: dad.memberId, title: 'Sushi', currency: '₪' })).body;
   const mom2 = (await post(`/api/rooms/${host2.code}/join`, { memberId: momId })).body;
   const noa2 = (await post(`/api/rooms/${host2.code}/join`, { memberId: noa.memberId })).body;
   await playRound(host2.code, [[host2, 900], [mom2, 1000], [noa2, 1150]], 1000, mom2);
@@ -139,7 +157,8 @@ test('a family plays several dinners; history is exact, deduplicated and survive
   // --- backup: re-importing the same backup does not duplicate anything
   const backup = await (await fetch(`${base}/api/families/${fam.code}/export`)).json();
   assert.equal(backup.format, 'checkmate-family');
-  assert.equal((await post('/api/families/import', backup)).status, 200);
+  assert.equal((await post('/api/families/import', backup)).status, 403, 'merging into an existing family needs its key');
+  assert.equal((await post('/api/families/import', { ...backup, key })).status, 200);
   const again = buildHall(await get(`/api/families/${fam.code}`));
   assert.equal(again.totals.rounds, 3);
   assert.equal(Object.keys(again.members).length, 3);
@@ -151,11 +170,11 @@ test('a family plays several dinners; history is exact, deduplicated and survive
   assert.equal((await post('/api/families/import', { nope: 1 })).status, 400);
 
   // --- duplicates: "Daddy" was created on purpose, plays once, then gets merged into Dad
-  const daddy = (await post(`/api/families/${fam.code}/members`, { name: 'Daddy', avatar: '🍔', force: true })).body;
-  const host3 = (await post('/api/rooms', { familyCode: fam.code, memberId: momId, title: 'Thai', currency: '₪' })).body;
+  const daddy = (await post(`/api/families/${fam.code}/members`, { name: 'Daddy', avatar: '🍔', force: true, key })).body;
+  const host3 = (await post('/api/rooms', { familyCode: fam.code, familyKey: key, memberId: momId, title: 'Thai', currency: '₪' })).body;
   const dd = (await post(`/api/rooms/${host3.code}/join`, { memberId: daddy.memberId })).body;
   await playRound(host3.code, [[host3, 250], [dd, 200]], 200, host3);
-  assert.equal((await post(`/api/families/${fam.code}/merge`, { from: daddy.memberId, into: dad.memberId })).status, 200);
+  assert.equal((await post(`/api/families/${fam.code}/merge`, { from: daddy.memberId, into: dad.memberId, key })).status, 200);
   const merged = buildHall(await get(`/api/families/${fam.code}`));
   assert.equal(merged.members[daddy.memberId], undefined);
   assert.equal(merged.members[dad.memberId].rounds, 4, 'his 3 rounds + the one played as "Daddy"');
@@ -163,7 +182,7 @@ test('a family plays several dinners; history is exact, deduplicated and survive
 
   // --- removing a dinner from the Hall of Fame
   const thai = Object.values((await get(`/api/families/${fam.code}`)).dinners).find(d => d.title === 'Thai');
-  assert.equal((await post(`/api/families/${fam.code}/dinners/${thai.id}/delete`)).status, 200);
+  assert.equal((await post(`/api/families/${fam.code}/dinners/${thai.id}/delete`, { key })).status, 200);
   assert.equal(buildHall(await get(`/api/families/${fam.code}`)).totals.dinners, 2);
 });
 

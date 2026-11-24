@@ -50,7 +50,7 @@ const S = {
   roastSeen: new Set(),
   roastCache: new Map(),
 };
-S.createOpts.familyCode = currentFamilyCode();
+S.createOpts.familyCode = entryFor(currentFamilyCode())?.key ? currentFamilyCode() : (myFamilies().find(f => f.key)?.code || null);
 S.createOpts.currency = initialCurrency(S.createOpts.familyCode);
 
 /** Table currency: the family's usual one, else this phone's last pick, else ₪ for Israeli users. */
@@ -171,6 +171,7 @@ function connect() {
       document.querySelectorAll(`#app .roast-card[data-pid="${CSS.escape(target)}"]`).forEach(c => updateCounts(c, counts));
     }
   });
+  es.addEventListener('gone', () => { es.close(); store.del(sessionKey(S.code)); toast(t('tableClosed')); go('home'); });
   es.onerror = async () => {
     failures++;
     if (failures >= 3) {
@@ -862,7 +863,7 @@ function familyHomeCard() {
 
 /** Create-table: which family is this dinner for, and who am I in it? */
 function createFamilyPicker() {
-  const list = myFamilies();
+  const list = myFamilies().filter(f => f.key);
   if (!list.length) return '';
   const sel = S.createOpts.familyCode;
   return `<div class="field"><span class="small muted" style="font-weight:600">${esc(t('playFor'))}</span>
@@ -903,7 +904,7 @@ function familyJoinBody(info) {
 }
 
 async function joinAsMember(memberId) {
-  const res = await api(`/api/rooms/${S.code}/join`, { memberId });
+  const res = await api(`/api/rooms/${S.code}/join`, { memberId, token: store.get(sessionKey(S.code))?.token });
   afterJoin(res);
 }
 function afterJoin(res) {
@@ -912,7 +913,7 @@ function afterJoin(res) {
   const fam = S.joinInfo?.family;
   if (fam && res.memberId) {
     const m = fam.members.find(x => x.id === res.memberId) || { name: S.profile.name, avatar: S.profile.avatar };
-    saveFamilyEntry({ code: fam.code, name: fam.name, memberId: res.memberId, memberName: m.name, memberAvatar: m.avatar });
+    saveFamilyEntry({ code: fam.code, name: fam.name, memberId: res.memberId, memberName: m.name, memberAvatar: m.avatar, ...(res.familyKey ? { key: res.familyKey } : {}) });
     if (res.rejoined) toast(t('welcomeMember', { name: m.name }));
   } else if (res.rejoined) toast(t('welcomeBack'));
   S.joinMode = null;
@@ -982,7 +983,7 @@ function pickMeModal(code) {
   modal(`<div class="stack">
     <h2>${esc(t('pickMe'))}</h2>
     ${rosterHtml(members, { meId: entryFor(code)?.memberId, action: 'pick' })}
-    <form class="stack" data-new-member>
+    <form class="stack ${entryFor(code)?.key ? '' : 'hidden'}" data-new-member>
       <label class="field"><span>${esc(t('imNew'))}</span><input class="text" dir="auto" name="name" maxlength="24" placeholder="${esc(t('yourName'))}" value=""></label>
       <button class="btn block" type="submit">${esc(t('save'))}</button>
     </form>
@@ -995,7 +996,7 @@ function pickMeModal(code) {
       if (!name) return;
       const add = async (force) => {
         try {
-          const res = await api(`/api/families/${code}/members`, { name, avatar: S.profile.avatar, force });
+          const res = await api(`/api/families/${code}/members`, { name, avatar: S.profile.avatar, force, key: entryFor(code)?.key });
           const f = await loadFamily(code, null, { force: true });
           close();
           saveFamilyEntry({ code, name: f.family.name, memberId: res.memberId, memberName: name, memberAvatar: f.family.members[res.memberId]?.avatar });
@@ -1018,7 +1019,7 @@ function hallSettingsModal() {
   modal(settingsHtml(H, url, qrSvg(url)), (el, close) => {
     el.querySelector('[data-act="copy"]').onclick = () => copy(url);
     el.querySelector('[data-act="rename"]').onclick = async () => {
-      try { await api(`/api/families/${code}`, { name: el.querySelector('#fam-name').value }); toast(t('saved')); } catch (err) { toastErr(err); }
+      try { await api(`/api/families/${code}`, { name: el.querySelector('#fam-name').value, key: entryFor(code)?.key }); toast(t('saved')); } catch (err) { toastErr(err); }
     };
     el.querySelector('[data-act="merge"]')?.addEventListener('click', async () => {
       const from = el.querySelector('#merge-from').value, into = el.querySelector('#merge-into').value;
@@ -1026,7 +1027,7 @@ function hallSettingsModal() {
       if (from === into) { toast(t('errors.badMerge')); return; }
       if (!confirm(t('mergeConfirm', { from: mf.name, into: mi.name }))) return;
       try {
-        await api(`/api/families/${code}/merge`, { from, into });
+        await api(`/api/families/${code}/merge`, { from, into, key: entryFor(code)?.key });
         const mine = entryFor(code);
         if (mine?.memberId === from) saveFamilyEntry({ code, memberId: into, memberName: mi.name, memberAvatar: mi.avatar });
         toast(t('merged')); close();
@@ -1060,7 +1061,7 @@ function createFamilyModal() {
       S.profile.name = String(fd.get('name')).trim(); saveProfile();
       try {
         const res = await api('/api/families', { name: fd.get('family'), member: { name: S.profile.name, avatar: S.profile.avatar } });
-        saveFamilyEntry({ code: res.code, name: res.family.name, memberId: res.memberId, memberName: S.profile.name, memberAvatar: res.family.members[res.memberId].avatar });
+        saveFamilyEntry({ code: res.code, name: res.family.name, key: res.key, memberId: res.memberId, memberName: S.profile.name, memberAvatar: res.family.members[res.memberId].avatar });
         S.createOpts.familyCode = res.code;
         close(); toast(t('familyCreated'));
         openHall(res.code);
@@ -1072,8 +1073,9 @@ function createFamilyModal() {
 async function restoreFromFile(file) {
   try {
     const data = JSON.parse(await file.text());
-    const res = await api('/api/families/import', data);
-    saveFamilyEntry({ code: res.code, name: res.family.name });
+    const code = data?.family?.code || data?.code;
+    const res = await api('/api/families/import', { ...data, key: code ? entryFor(code)?.key : undefined });
+    saveFamilyEntry({ code: res.code, name: res.family.name, ...(res.key ? { key: res.key } : {}) });
     toast(t('restored'));
     openHall(res.code);
   } catch (err) { toast(err.code ? errorText(err) : t('errors.badBackup')); }
@@ -1150,7 +1152,7 @@ document.addEventListener('click', async (e) => {
     case 'hall-settings': hallSettingsModal(); return;
     case 'hall-pick-me': pickMeModal(S.hall.code); return;
     case 'hall-delete-dinner':
-      if (confirm(t('deleteConfirm'))) api(`/api/families/${S.hall.code}/dinners/${btn.dataset.id}/delete`, {}).catch(toastErr);
+      if (confirm(t('deleteConfirm'))) api(`/api/families/${S.hall.code}/dinners/${btn.dataset.id}/delete`, { key: entryFor(S.hall.code)?.key }).catch(toastErr);
       return;
     case 'create-family': createFamilyModal(); return;
     case 'join-family': {
@@ -1244,7 +1246,7 @@ document.addEventListener('submit', async (e) => {
         if (!createAsMember()) { S.profile.name = String(fd.get('name')).trim(); saveProfile(); }
         if (famCode && !memberId) { // a new person for this family: check for look-alike names first
           memberId = await new Promise((resolve) => {
-            const add = (force) => api(`/api/families/${famCode}/members`, { name: S.profile.name, avatar: S.profile.avatar, force })
+            const add = (force) => api(`/api/families/${famCode}/members`, { name: S.profile.name, avatar: S.profile.avatar, force, key: entryFor(famCode)?.key })
               .then(r => resolve(r.memberId))
               .catch(err => err.code === 'similarName' ? similarModal(err.data.matches, resolve, () => add(true), () => resolve(null)) : (toastErr(err), resolve(null)));
             add(false);
@@ -1256,7 +1258,7 @@ document.addEventListener('submit', async (e) => {
           S.createOpts.newMember = false;
         }
         if (famCode) saveFamilyEntry({ code: famCode, currency: S.createOpts.currency });
-        const res = await api('/api/rooms', { name: S.profile.name, avatar: S.profile.avatar, familyCode: famCode || null, memberId, title: String(fd.get('title') || '').trim() || t('defaultTitle'), roundLabel: t('firstRound'), currency: S.createOpts.currency, mode: S.createOpts.mode });
+        const res = await api('/api/rooms', { name: S.profile.name, avatar: S.profile.avatar, familyCode: famCode || null, familyKey: famCode ? entryFor(famCode)?.key : undefined, memberId, title: String(fd.get('title') || '').trim() || t('defaultTitle'), roundLabel: t('firstRound'), currency: S.createOpts.currency, mode: S.createOpts.mode });
         S.code = res.code; S.session = { pid: res.pid, token: res.token };
         store.set(sessionKey(res.code), S.session);
         history.pushState({}, '', `/r/${res.code}`);
@@ -1311,3 +1313,6 @@ setInterval(() => {
 applyLang();
 installTooltips();
 boot();
+
+// Installable app (home screen on iPhone/Android); never blocks the game if unsupported.
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
