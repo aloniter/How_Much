@@ -1,4 +1,4 @@
-// How Much? — the browser app. Plain ES modules, no build step.
+// CheckMate — the browser app. Plain ES modules, no build step.
 import { computeRoundStats, leaderboard, fmtDuration } from './stats.js';
 import { esc, fmtMoney, fmtPct, numberLine, errorBars, speedBars, pointsBars, installTooltips } from './charts.js';
 import { sfx, unlockAudio, confetti, floatEmoji, buzz, isMuted, setMuted } from './fx.js';
@@ -17,7 +17,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
   del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
 };
-const sessionKey = (code) => `howmuch:session:${code}`;
+const sessionKey = (code) => `checkmate:session:${code}`;
 
 // ---------- app state ----------
 const S = {
@@ -32,8 +32,8 @@ const S = {
   editingGuess: false,
   draft: { amount: '', quote: '', actual: '' },
   split: { tip: 10, people: null },
-  profile: store.get('howmuch:profile') || { name: '', avatar: AVATARS[(Math.random() * AVATARS.length) | 0] },
-  createOpts: { title: '', currency: store.get('howmuch:currency') || '₪', mode: 'classic' },
+  profile: store.get('checkmate:profile') || { name: '', avatar: AVATARS[(Math.random() * AVATARS.length) | 0] },
+  createOpts: { title: '', currency: store.get('checkmate:currency') || '₪', mode: 'classic' },
   joinInfo: null,
   lastStateJSON: '',
 };
@@ -65,7 +65,7 @@ const isHost = () => S.room?.hostId === S.session?.pid;
 const cur = () => S.room?.currency || '';
 const playerById = (id) => S.room?.players.find(p => p.id === id);
 
-function saveProfile() { store.set('howmuch:profile', S.profile); }
+function saveProfile() { store.set('checkmate:profile', S.profile); }
 
 // ---------- routing ----------
 function go(screen, code) {
@@ -218,7 +218,7 @@ function playReveal(r) {
         if (winner && !winner.busted) {
           const w = document.createElement('div');
           w.className = 'winner';
-          w.textContent = `🏆 ${winner.avatar} ${winner.name} wins!`;
+          w.textContent = `♛ Checkmate! ${winner.avatar} ${winner.name} wins`;
           box.appendChild(w);
         }
         if (mine) {
@@ -273,9 +273,9 @@ function patch(html) {
 function homeView() {
   return `
   <div class="hero">
-    <span class="logo-emoji">🧾</span>
-    <h1 class="logo">How Much?</h1>
-    <p class="tagline">Guess the dinner bill. Win eternal family glory.</p>
+    <img class="logo-icon" src="/icon-256.png" width="128" height="128" alt="">
+    <h1 class="logo">CheckMate</h1>
+    <p class="tagline">Guess the check. Checkmate the family. ♛</p>
   </div>
   <div class="card stack">
     <button class="btn primary big block" data-go="create">🍽️ Start a new table</button>
@@ -293,11 +293,11 @@ function homeView() {
     </div>
   </div>
   ${recentTablesView()}
-  <p class="footer">Made for loud family dinners 🍷</p>`;
+  <p class="footer">♛ CheckMate · made for loud family dinners 🍷</p>`;
 }
 
 function recentTablesView() {
-  const list = store.get('howmuch:recent') || [];
+  const list = store.get('checkmate:recent') || [];
   if (!list.length) return '';
   return `<div class="card"><h2>Your recent tables</h2><div class="chips">${list.slice(0, 5).map(t =>
     `<button class="chip" data-action="open-recent" data-code="${esc(t.code)}">${esc(t.title)} · ${esc(t.code)}</button>`).join('')}</div></div>`;
@@ -603,7 +603,7 @@ function shareModal() {
     </div>`, (el) => {
     el.querySelector('[data-act="copy"]').onclick = () => copy(url);
     el.querySelector('[data-act="native"]')?.addEventListener('click', () =>
-      navigator.share({ title: 'How Much? 🧾', text: `Join our dinner game! Guess the bill 🍽️ Code: ${S.code}`, url }).catch(() => {}));
+      navigator.share({ title: 'CheckMate ♛', text: `Join our CheckMate table! Guess the dinner bill 🍽️ Code: ${S.code}`, url }).catch(() => {}));
   });
 }
 
@@ -674,7 +674,7 @@ function shareResults() {
   const s = computeRoundStats(r, S.room.players, S.room.mode);
   const medals = ['🥇', '🥈', '🥉'];
   const lines = [
-    `🧾 How Much? — ${S.room.title} (${r.label})`,
+    `♛ CheckMate — ${S.room.title} (${r.label})`,
     `Real bill: ${fmtMoney(s.actual, cur())} · Group average: ${fmtMoney(Math.round(s.average), cur())} (${fmtPct(s.avgPct)})`,
     '',
     ...s.rows.map((x, i) => `${medals[i] || `${i + 1}.`} ${x.avatar} ${x.name} — ${fmtMoney(x.amount, cur())} (${fmtPct(x.pct)}) ${x.verdict.emoji}`),
@@ -682,15 +682,15 @@ function shareResults() {
     ...s.awards.filter(a => ['farthest', 'fastest', 'bigspender', 'cheapskate'].includes(a.key)).map(a => `${a.emoji} ${a.title}: ${a.who.name}`),
   ];
   const text = lines.join('\n');
-  if (navigator.share) navigator.share({ title: 'How Much? results', text }).catch(() => copy(text));
+  if (navigator.share) navigator.share({ title: 'CheckMate results', text }).catch(() => copy(text));
   else copy(text);
 }
 
 // ---------- events ----------
 function rememberTable() {
-  const list = (store.get('howmuch:recent') || []).filter(t => t.code !== S.code);
+  const list = (store.get('checkmate:recent') || []).filter(t => t.code !== S.code);
   list.unshift({ code: S.code, title: S.room?.title || S.createOpts.title || 'Dinner' });
-  store.set('howmuch:recent', list.slice(0, 8));
+  store.set('checkmate:recent', list.slice(0, 8));
 }
 
 document.addEventListener('pointerdown', unlockAudio, { once: false, passive: true });
@@ -701,7 +701,7 @@ document.addEventListener('click', async (e) => {
 
   if (t.dataset.go) { go(t.dataset.go); return; }
   if (t.dataset.avatar) { S.profile.avatar = t.dataset.avatar; saveProfile(); render(); return; }
-  if (t.dataset.currency) { syncCreateForm(); S.createOpts.currency = t.dataset.currency; store.set('howmuch:currency', t.dataset.currency); render(); return; }
+  if (t.dataset.currency) { syncCreateForm(); S.createOpts.currency = t.dataset.currency; store.set('checkmate:currency', t.dataset.currency); render(); return; }
   if (t.dataset.mode) { syncCreateForm(); S.createOpts.mode = t.dataset.mode; render(); return; }
   if (t.dataset.react) {
     sfx.pop();

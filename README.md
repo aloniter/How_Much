@@ -1,4 +1,7 @@
-# 🧾 How Much?
+# ♛ CheckMate
+
+<img src="public/icon-256.png" width="128" alt="CheckMate icon">
+
 
 **A live party game for family dinners.** Everyone guesses the total bill on their own phone, then the receipt
 holder types in the real number and every phone does a drumroll reveal together, followed by charts, awards and
@@ -45,7 +48,7 @@ The app is a single small Node server. It keeps rooms in memory and uses Server-
 It runs on any host that supports Node:
 
 - **Render (free):** go to [render.com](https://render.com) and choose **New → Blueprint**, then pick this repo.
-  `render.yaml` already has the settings. You get a URL like `https://how-much.onrender.com`.
+  `render.yaml` already has the settings. You get a URL like `https://checkmate.onrender.com`.
   Free instances go to sleep when idle, so open the link a minute before dinner.
 - **Railway / Fly.io / any Docker host:** use the included `Dockerfile`, which listens on `$PORT`.
 
@@ -68,6 +71,7 @@ public/js/stats.js   scoring, awards, leaderboard (shared with the tests)
 public/js/charts.js  hand-made SVG charts with tap tooltips
 public/js/fx.js      synthesized sounds, confetti, floating reactions
 public/vendor/       qrcode-generator (MIT)
+public/icon-*.png    app icon (also favicon / home-screen icon)
 test/                node:test suites
 ```
 

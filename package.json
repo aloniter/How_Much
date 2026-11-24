@@ -1,5 +1,5 @@
 {
-  "name": "how-much",
+  "name": "checkmate",
   "version": "1.0.0",
   "description": "A live party game for family dinners: everyone guesses the total bill on their phone, then see who was closest, fastest, and more.",
   "main": "server.js",

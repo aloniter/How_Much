@@ -1,22 +1,24 @@
-/* How Much? — warm candle-lit dinner theme. Dark by default, light follows the OS. */
+/* CheckMate — deep green & gold dinner theme (matches the app icon). Dark by default, light follows the OS. */
 :root {
   color-scheme: dark;
-  --bg: #16120f;
-  --bg-glow: #2a1d14;
-  --surface: #211b16;
-  --surface-2: #2b231d;
-  --line: rgba(255, 240, 220, 0.10);
-  --text: #f6efe6;
-  --text-2: #cbbfae;
-  --muted: #94877a;
-  --accent: #f5b942;      /* candle gold */
-  --accent-ink: #1c140b;
-  --accent-2: #ff7a59;    /* tomato */
-  --good: #3ccf7e;
+  --bg: #062a1f;
+  --bg-glow: #0d5a3e;
+  --surface: #0b3526;
+  --surface-2: #11442f;
+  --line: rgba(240, 230, 200, 0.12);
+  --text: #f7f0df;
+  --text-2: #c9d6c8;
+  --muted: #8fa797;
+  --accent: #f2b632;      /* crown gold */
+  --accent-ink: #1a1205;
+  --accent-2: #d94a52;    /* wine red */
+  --logo-a: #f7cf5a;
+  --logo-b: #e8a417;
+  --good: #49d98a;
   --under: #3987e5;       /* diverging: under the bill */
   --over: #e66767;        /* diverging: over the bill */
-  --grid: #3a322b;
-  --axis: #5a4f45;
+  --grid: #1c4d3a;
+  --axis: #3f6e5a;
   --radius: 18px;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   --font-display: "Fredoka", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -25,31 +27,48 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --bg: #fbf6ee;
-    --bg-glow: #f6e3c6;
-    --surface: #ffffff;
-    --surface-2: #f6efe4;
-    --line: rgba(60, 40, 20, 0.12);
-    --text: #231a12;
-    --text-2: #5d4f42;
-    --muted: #8a7b6c;
-    --accent: #e9a21f;
-    --accent-ink: #231a12;
-    --accent-2: #e85d3b;
+    --bg: #f7f1e3;
+    --bg-glow: #dcebdf;
+    --surface: #fffdf7;
+    --surface-2: #f1eada;
+    --line: rgba(16, 50, 35, 0.12);
+    --text: #10261d;
+    --text-2: #3f5a4d;
+    --muted: #748a7d;
+    --accent: #e8a917;
+    --accent-ink: #10261d;
+    --accent-2: #b3262f;
+    --logo-a: #0b7a50;
+    --logo-b: #01563c;
     --good: #12924c;
     --under: #2a78d6;
     --over: #e34948;
-    --grid: #ece3d6;
-    --axis: #c9bba9;
-    --shadow: 0 10px 30px rgba(80, 50, 20, 0.12);
+    --grid: #e6e0cf;
+    --axis: #c4bca6;
+    --shadow: 0 10px 30px rgba(16, 50, 35, 0.12);
   }
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #fbf6ee; --bg-glow: #f6e3c6; --surface: #ffffff; --surface-2: #f6efe4;
-  --line: rgba(60, 40, 20, 0.12); --text: #231a12; --text-2: #5d4f42; --muted: #8a7b6c;
-  --accent: #e9a21f; --accent-ink: #231a12; --accent-2: #e85d3b; --good: #12924c;
-  --under: #2a78d6; --over: #e34948; --grid: #ece3d6; --axis: #c9bba9; --shadow: 0 10px 30px rgba(80, 50, 20, 0.12);
+  --bg: #f7f1e3;
+  --bg-glow: #dcebdf;
+  --surface: #fffdf7;
+  --surface-2: #f1eada;
+  --line: rgba(16, 50, 35, 0.12);
+  --text: #10261d;
+  --text-2: #3f5a4d;
+  --muted: #748a7d;
+  --accent: #e8a917;
+  --accent-ink: #10261d;
+  --accent-2: #b3262f;
+  --logo-a: #0b7a50;
+  --logo-b: #01563c;
+  --good: #12924c;
+  --under: #2a78d6;
+  --over: #e34948;
+  --grid: #e6e0cf;
+  --axis: #c4bca6;
+  --shadow: 0 10px 30px rgba(16, 50, 35, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -152,9 +171,10 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
   font-size: clamp(3rem, 15vw, 4.6rem);
   line-height: .95;
   font-weight: 700;
-  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  background: linear-gradient(120deg, var(--logo-a), var(--logo-b));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+.logo-icon { width: 128px; height: 128px; border-radius: 30px; display: block; margin: 0 auto 14px; box-shadow: 0 14px 34px rgba(0,0,0,.35); animation: bob 3s ease-in-out infinite; }
 .logo-emoji { font-size: 3.2rem; display: block; margin-bottom: 6px; animation: bob 3s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateY(-6px) rotate(-4deg); } }
 .tagline { color: var(--text-2); margin-top: 10px; font-size: 1.05rem; }
@@ -315,9 +335,9 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
 #toast {
   position: fixed; left: 50%; top: calc(16px + env(safe-area-inset-top)); transform: translate(-50%, -150%);
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; z-index: 60; font-weight: 600;
-  transition: transform .25s ease; max-width: calc(100vw - 32px); text-align: center;
+  transition: transform .25s ease, visibility .25s; max-width: calc(100vw - 32px); text-align: center; visibility: hidden;
 }
-#toast.show { transform: translate(-50%, 0); }
+#toast.show { transform: translate(-50%, 0); visibility: visible; }
 .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 35; display: grid; place-items: end center; }
 .modal { width: 100%; max-width: 640px; background: var(--surface); border-radius: 24px 24px 0 0; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); max-height: 92dvh; overflow: auto; animation: up .25s ease-out; }
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }

@@ -1,4 +1,4 @@
-// How Much? — a live "guess the dinner bill" party game.
+// CheckMate — a live "guess the dinner bill" party game.
 // Zero-dependency Node server: static files + JSON API + Server-Sent Events.
 'use strict';
 
@@ -356,7 +356,7 @@ function lanAddresses() {
 if (require.main === module) {
   loadRooms();
   server.listen(PORT, HOST, () => {
-    console.log(`\n🍽️  How Much? is running`);
+    console.log(`\n♛  CheckMate is running`);
     console.log(`   Local:   http://localhost:${PORT}`);
     for (const ip of lanAddresses()) console.log(`   Network: http://${ip}:${PORT}   ← open this on everyone's phone (same Wi-Fi)`);
     console.log('');

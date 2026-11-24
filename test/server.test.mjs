@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
-process.env.DATA_FILE = path.join(os.tmpdir(), `howmuch-test-${process.pid}.json`);
+process.env.DATA_FILE = path.join(os.tmpdir(), `checkmate-test-${process.pid}.json`);
 const require = createRequire(import.meta.url);
 const { server } = require('../server.js');
 
@@ -93,7 +93,7 @@ test('unknown rooms, bad input and static files', async () => {
   assert.equal((await post('/api/rooms', { name: '' })).status, 400);
   const html = await fetch(`${base}/r/ABCD`);
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /How Much\?/);
+  assert.match(await html.text(), /CheckMate/);
   assert.equal((await fetch(`${base}/../server.js`)).status === 200 && false, false);
   const trav = await fetch(`${base}/%2e%2e/server.js`);
   assert.notEqual(await trav.text().then(t => t.includes('createServer')), true);

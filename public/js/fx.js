@@ -2,12 +2,12 @@
 
 let ctx = null;
 let muted = false;
-try { muted = localStorage.getItem('howmuch:muted') === '1'; } catch { /* storage blocked */ }
+try { muted = localStorage.getItem('checkmate:muted') === '1'; } catch { /* storage blocked */ }
 
 export const isMuted = () => muted;
 export function setMuted(v) {
   muted = v;
-  try { localStorage.setItem('howmuch:muted', v ? '1' : '0'); } catch { /* ignore */ }
+  try { localStorage.setItem('checkmate:muted', v ? '1' : '0'); } catch { /* ignore */ }
 }
 
 /** Must be called from a user gesture once so phones allow sound later. */
