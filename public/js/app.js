@@ -6,11 +6,11 @@ import { sfx, unlockAudio, confetti, floatEmoji, buzz, isMuted, setMuted } from 
 import { roastRound, angleUsage } from './roast.js';
 import { playRoastShow, cardHtml, updateCounts, inShowWindow, REVEAL_MS, roastImage, shareImage } from './roastview.js';
 import { hallView, drawHallCharts, profileHtml, settingsHtml, rosterHtml } from './hallview.js';
+import { CURRENCIES, browserDefaultCurrency } from './currency.js';
 import { myFamilies, entryFor, saveFamilyEntry, forgetFamily, loadFamily, cached, currentFamilyCode, setCurrentFamily } from './family.js';
 
 const AVATARS = ['🍕', '🍔', '🌮', '🍣', '🥗', '🍝', '🥩', '🍤', '🧁', '🍷', '🍺', '🥂', '🦞', '🥑', '🌶️', '🍩', '🧀', '🍗', '🥐', '🍦'];
 const REACTIONS = ['😂', '🔥', '😱', '👏', '🍅', '💸', '🤑', '🙈'];
-const CURRENCIES = ['₪', '$', '€', '£', '¥', '₹'];
 // Hebrew keyboard → the English letter on the same key, so codes can be typed without switching keyboards.
 const HE_KEYS = { '/': 'Q', "'": 'W', 'ק': 'E', 'ר': 'R', 'א': 'T', 'ט': 'Y', 'ו': 'U', 'ן': 'I', 'ם': 'O', 'פ': 'P', 'ש': 'A', 'ד': 'S', 'ג': 'D', 'כ': 'F', 'ע': 'G', 'י': 'H', 'ח': 'J', 'ל': 'K', 'ך': 'L', 'ז': 'Z', 'ס': 'X', 'ב': 'C', 'ה': 'V', 'נ': 'B', 'מ': 'N', 'צ': 'M' };
 const toCode = (v, n = 4) => [...v].map(ch => HE_KEYS[ch] || ch).join('').replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, n);
@@ -40,7 +40,7 @@ const S = {
   draft: { amount: '', quote: '', actual: '' },
   split: { tip: 10, people: null },
   profile: store.get('checkmate:profile') || { name: '', avatar: AVATARS[(Math.random() * AVATARS.length) | 0] },
-  createOpts: { title: '', currency: store.get('checkmate:currency') || '₪', mode: 'classic' },
+  createOpts: { title: '', currency: null, mode: 'classic' },
   joinInfo: null,
   joinMode: null,          // null | 'new' | 'guest' (family tables)
   hall: null,              // { code, tab, from }
@@ -51,6 +51,17 @@ const S = {
   roastCache: new Map(),
 };
 S.createOpts.familyCode = currentFamilyCode();
+S.createOpts.currency = initialCurrency(S.createOpts.familyCode);
+
+/** Table currency: the family's usual one, else this phone's last pick, else ₪ for Israeli users. */
+function initialCurrency(famCode) {
+  return (famCode && entryFor(famCode)?.currency) || store.get('checkmate:currency') || browserDefaultCurrency();
+}
+function currencyChips(selected, attr) {
+  const names = t('currencyNames');
+  return `<div class="chips">${CURRENCIES.map(c => `<button type="button" class="chip cur-chip" ${attr}="${c.sym}" aria-pressed="${c.sym === selected}" title="${esc(names[c.sym] || c.code)}" aria-label="${esc(names[c.sym] || c.code)}"><b>${c.sym}</b> <small dir="ltr">${c.code}</small></button>`).join('')}</div>
+    <p class="small muted cur-name">${esc(names[selected] || selected || '')}</p>`;
+}
 
 // ---------- utilities ----------
 function toast(msg, ms = 2200) {
@@ -370,7 +381,7 @@ function createView() {
     <div class="field"><span class="small muted" style="font-weight:600">${esc(t('yourAvatar'))}</span>${avatarPicker()}</div>`}
     <label class="field"><span>${esc(t('whereEating'))}</span><input class="text" dir="auto" id="c-title" name="title" maxlength="40" placeholder="${esc(t('titlePh'))}" value="${esc(o.title)}"></label>
     <div class="field"><span class="small muted" style="font-weight:600">${esc(t('currency'))}</span>
-      <div class="chips">${CURRENCIES.map(c => `<button type="button" class="chip" data-currency="${c}" aria-pressed="${c === o.currency}">${c}</button>`).join('')}</div>
+      ${currencyChips(o.currency, 'data-currency')}
     </div>
     <div class="field"><span class="small muted" style="font-weight:600">${esc(t('rules'))}</span>
       ${modeButtons('data-mode', o.mode)}
@@ -706,7 +717,7 @@ function settingsModal() {
       <label class="field"><span>${esc(t('tableName'))}</span><input class="text" name="title" maxlength="40" value="${esc(S.room.title)}"></label>
       ${r.actual == null ? `<label class="field"><span>${esc(t('roundCalled'))}</span><input class="text" name="roundLabel" maxlength="40" value="${esc(r.label)}"></label>` : ''}
       <div class="field"><span class="small muted" style="font-weight:600">${esc(t('currency'))}</span>
-        <div class="chips">${CURRENCIES.map(c => `<button type="button" class="chip" data-cur="${c}" aria-pressed="${c === S.room.currency}">${c}</button>`).join('')}</div></div>
+        ${currencyChips(S.room.currency, 'data-cur')}</div>
       ${modeButtons('data-m', S.room.mode)}
       <button class="btn primary block" type="submit">${esc(t('save'))}</button>
       <button class="btn ghost block" type="button" data-close>${esc(t('cancel'))}</button>
@@ -714,7 +725,7 @@ function settingsModal() {
     let currency = S.room.currency, mode = S.room.mode;
     el.addEventListener('click', (e) => {
       const c = e.target.closest('[data-cur]'), m = e.target.closest('[data-m]');
-      if (c) { currency = c.dataset.cur; el.querySelectorAll('[data-cur]').forEach(x => x.setAttribute('aria-pressed', x.dataset.cur === currency)); }
+      if (c) { currency = c.dataset.cur; el.querySelectorAll('[data-cur]').forEach(x => x.setAttribute('aria-pressed', x.dataset.cur === currency)); el.querySelector('.cur-name').textContent = t('currencyNames')[currency] || currency; }
       if (m) { mode = m.dataset.m; el.querySelectorAll('[data-m]').forEach(x => x.setAttribute('aria-pressed', x.dataset.m === mode)); }
     });
     el.querySelector('form').onsubmit = async (e) => {
@@ -1101,6 +1112,7 @@ document.addEventListener('click', async (e) => {
   }
   if (btn.dataset.createFamily != null) {
     syncCreateForm(); S.createOpts.familyCode = btn.dataset.createFamily || null; S.createOpts.newMember = false;
+    S.createOpts.currency = initialCurrency(S.createOpts.familyCode);
     if (btn.dataset.createFamily) setCurrentFamily(btn.dataset.createFamily);
     render(); return;
   }
@@ -1243,6 +1255,7 @@ document.addEventListener('submit', async (e) => {
           saveFamilyEntry({ code: famCode, memberId, memberName: m?.name, memberAvatar: m?.avatar });
           S.createOpts.newMember = false;
         }
+        if (famCode) saveFamilyEntry({ code: famCode, currency: S.createOpts.currency });
         const res = await api('/api/rooms', { name: S.profile.name, avatar: S.profile.avatar, familyCode: famCode || null, memberId, title: String(fd.get('title') || '').trim() || t('defaultTitle'), roundLabel: t('firstRound'), currency: S.createOpts.currency, mode: S.createOpts.mode });
         S.code = res.code; S.session = { pid: res.pid, token: res.token };
         store.set(sessionKey(res.code), S.session);

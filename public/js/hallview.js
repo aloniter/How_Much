@@ -64,7 +64,8 @@ export function hallView(H) {
     `<button role="tab" aria-selected="${tab === k}" data-action="hall-tab" data-tab="${k}">${esc(t('tab' + k[0].toUpperCase() + k.slice(1)))}</button>`).join('')}</nav>
   <div class="tab-body" data-key="hall-body-${tab}">${
     !data.rounds.length && tab !== 'players' ? `<section class="card center empty-hall"><div class="big-emoji">🍽️</div><p>${esc(t('emptyHall'))}</p></section>`
-      : tab === 'board' ? boardTab(H) : tab === 'records' ? recordsTab(H) : tab === 'players' ? playersTab(H) : historyTab(H)}</div>`;
+      : tab === 'board' ? boardTab(H) : tab === 'records' ? recordsTab(H) : tab === 'players' ? playersTab(H) : historyTab(H)}</div>
+  <p class="footer" data-key="hall-foot"><button class="link-lang" data-action="lang" aria-label="${esc(t('switchAria'))}">${esc(t('switchTo'))}</button></p>`;
 }
 
 function boardTab({ family, data, meId }) {

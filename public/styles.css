@@ -563,3 +563,6 @@ select.text { appearance: auto; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 .chart .trend-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .chart .trend-win { fill: var(--good); stroke: var(--surface); stroke-width: 2; }
+
+.cur-chip small { font-size: .7rem; opacity: .75; font-weight: 600; }
+.cur-name { margin-top: 6px; }

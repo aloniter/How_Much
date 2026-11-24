@@ -29,7 +29,8 @@ a leaderboard.
   Points per round: 🥇 5, 🥈 3, 🥉 2, everyone else 1, and +3 for a guess within 1%.
 - **Bill splitter** with a tip slider, plus a "farthest off buys dessert" rule 😈.
 - **Share the results** as text to the family WhatsApp group.
-- **English or Hebrew 🇬🇧🇮🇱.** Each phone chooses its own language, and Hebrew phones get Hebrew automatically. Hebrew switches the whole layout to right-to-left. You can switch any time from the home screen or the bottom of the game screen, and you can type the table code on a Hebrew keyboard without switching to English.
+- **English or Hebrew 🇬🇧🇮🇱.** Each phone chooses its own language, and Hebrew phones get Hebrew automatically. The Hebrew text is written as a playful Israeli party game, not translated from English. It avoids gender slash forms ("ניחש/ה"): it speaks to the whole table ("לוחצים על עצמכם") or uses gender-neutral wording. The brand stays **CheckMate** in both languages. The layout switches to right-to-left, including the Hall of Fame and the share cards, and switching language is available on every screen.
+- **Currency per table** (₪ ILS, $, €, £, ¥, ₹). The default is ₪ for Israeli users (Hebrew phone, an Israeli locale or an Israeli time zone) and the local currency elsewhere. Family tables remember the currency the family usually uses, and the host can change it at any time.
 - Works in light and dark mode and is built for phones first. If you refresh or switch phones, you keep your seat: join again with the same name.
 
 ## 🏆 Family Hall of Fame
@@ -52,7 +53,7 @@ Each dinner adds to the family's permanent championship.
 After the winner is revealed, every phone plays **Roast of the Night** at the same moment. Each player gets a personal roast (the winner gets a compliment), and the biggest miss gets a dramatic finale with a siren and drumroll 🚨🥁.
 
 - Jokes are picked from the real game data: how far off you were in money and %, whether you guessed over or under, your speed, how many times you changed your guess (and whether it got worse), your place, the family average, and with family history your losing or winning streak, first win, comeback, personal records and rivalries (*"You finally beat Dad. Screenshot this before it happens again."*).
-- A **template library** of about 150 lines per language, plus extra one-liners that can be added at the end, combined from the data. English and Hebrew were written separately for natural humour, not translated line by line. The Hebrew lines use second-person past tense, which reads the same for any gender.
+- A **template library** of about 135 lines per language, plus extra one-liners that can be added at the end, combined from the data. The Hebrew jokes are original Israeli humour, not translations (*"אחי, אכלנו במסעדה, לא קנינו אותה."*, *"מישהו פה עדיין חי במחירים של 2005."*, *"אפילו המחשבון התבייש."*). They are written mostly in second-person past tense, which is spelled the same for any gender.
 - **No repeats:** every phone shows the same roast for the same round, and each person cycles through the lines for a situation before any line comes back.
 - **Live emoji reactions** on each roast card, with counts that update on every phone.
 - **📤 Share:** any roast card becomes a 1080×1350 image ready for WhatsApp, in English or Hebrew (right-to-left).
@@ -94,7 +95,7 @@ It runs on any host that supports Node:
 
 ```bash
 npm run dev   # restarts on file changes
-npm test      # scoring, Hall of Fame stats, roast engine, API + restart-persistence tests
+npm test      # scoring, Hall of Fame stats, roast engine, EN/HE parity + no slash forms, currency, API + restart tests
 ```
 
 ```
@@ -113,6 +114,7 @@ public/js/family.js  families remembered on this phone + history cache
 public/js/roast.js   roast engine (situation picking, rotation, kickers)
 public/js/roast-lines.js  the joke library (EN + HE)
 public/js/roastview.js   synchronized Roast of the Night show + shareable card images
+public/js/currency.js  currencies + default per phone (₪ for Israeli users)
 public/vendor/       qrcode-generator (MIT)
 public/icon-*.png    app icon (also favicon / home-screen icon)
 test/                node:test suites
