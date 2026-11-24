@@ -170,7 +170,7 @@ async function api(req, res, parts, url) {
   if (req.method === 'POST' && parts.length === 1) {
     const body = await readBody(req);
     const name = cleanText(body.name, 24);
-    if (!name) return json(res, 400, { error: 'Please enter your name' });
+    if (!name) return json(res, 400, { error: 'Please enter your name', code: 'nameRequired' });
     const code = roomCode();
     const pid = id();
     const token = id();
@@ -192,7 +192,7 @@ async function api(req, res, parts, url) {
 
   const code = String(parts[1] || '').toUpperCase();
   const room = rooms.get(code);
-  if (!room) return json(res, 404, { error: 'No dinner table with that code 🤔' });
+  if (!room) return json(res, 404, { error: 'No dinner table with that code 🤔', code: 'notFound' });
   const action = parts[2];
 
   // GET /api/rooms/:code → public peek (for the join screen)
@@ -208,7 +208,7 @@ async function api(req, res, parts, url) {
   if (req.method === 'GET' && action === 'events') {
     const pid = url.searchParams.get('pid');
     const token = url.searchParams.get('token');
-    if (!auth(room, { pid, token })) return json(res, 403, { error: 'Not in this room' });
+    if (!auth(room, { pid, token })) return json(res, 403, { error: 'Not in this room', code: 'notInRoom' });
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -234,8 +234,8 @@ async function api(req, res, parts, url) {
 
   if (action === 'join') {
     const name = cleanText(body.name, 24);
-    if (!name) return json(res, 400, { error: 'Please enter your name' });
-    if (Object.keys(room.players).length >= MAX_PLAYERS) return json(res, 400, { error: 'This table is full!' });
+    if (!name) return json(res, 400, { error: 'Please enter your name', code: 'nameRequired' });
+    if (Object.keys(room.players).length >= MAX_PLAYERS) return json(res, 400, { error: 'This table is full!', code: 'full' });
     // Same name again (e.g. new phone / cleared browser)? Let them take the seat back.
     const existing = Object.values(room.players).find(p => p.name.toLowerCase() === name.toLowerCase());
     if (existing) {
@@ -251,15 +251,15 @@ async function api(req, res, parts, url) {
   }
 
   const player = auth(room, body);
-  if (!player) return json(res, 403, { error: 'Not in this room' });
+  if (!player) return json(res, 403, { error: 'Not in this room', code: 'notInRoom' });
   const round = currentRound(room);
   const isHost = room.hostId === player.id;
 
   switch (action) {
     case 'guess': {
-      if (round.actual != null) return json(res, 400, { error: 'Too late — the bill was already revealed!' });
+      if (round.actual != null) return json(res, 400, { error: 'Too late — the bill was already revealed!', code: 'tooLate' });
       const amount = cleanAmount(body.amount);
-      if (amount == null) return json(res, 400, { error: 'That is not a price 😅' });
+      if (amount == null) return json(res, 400, { error: 'That is not a price 😅', code: 'notPrice' });
       const prev = round.guesses[player.id];
       round.guesses[player.id] = {
         amount,
@@ -272,10 +272,10 @@ async function api(req, res, parts, url) {
       return json(res, 200, { ok: true });
     }
     case 'reveal': {
-      if (round.actual != null) return json(res, 400, { error: 'Already revealed' });
+      if (round.actual != null) return json(res, 400, { error: 'Already revealed', code: 'alreadyRevealed' });
       const actual = cleanAmount(body.actual);
-      if (actual == null) return json(res, 400, { error: 'Enter the real total from the receipt' });
-      if (!Object.keys(round.guesses).length) return json(res, 400, { error: 'Nobody has guessed yet!' });
+      if (actual == null) return json(res, 400, { error: 'Enter the real total from the receipt', code: 'enterActual' });
+      if (!Object.keys(round.guesses).length) return json(res, 400, { error: 'Nobody has guessed yet!', code: 'nobodyGuessed' });
       round.actual = actual;
       round.revealedAt = now();
       round.revealedBy = player.id;
@@ -283,8 +283,8 @@ async function api(req, res, parts, url) {
       return json(res, 200, { ok: true });
     }
     case 'next': {
-      if (round.actual == null) return json(res, 400, { error: 'Finish this round first' });
-      if (room.rounds.length >= MAX_ROUNDS) return json(res, 400, { error: 'That is a lot of dinners. Start a new table!' });
+      if (round.actual == null) return json(res, 400, { error: 'Finish this round first', code: 'finishRound' });
+      if (room.rounds.length >= MAX_ROUNDS) return json(res, 400, { error: 'That is a lot of dinners. Start a new table!', code: 'tooManyRounds' });
       newRound(room, body.label);
       broadcast(room);
       return json(res, 200, { ok: true });
@@ -303,7 +303,7 @@ async function api(req, res, parts, url) {
       return json(res, 200, { ok: true });
     }
     case 'settings': {
-      if (!isHost) return json(res, 403, { error: 'Only the host can change settings' });
+      if (!isHost) return json(res, 403, { error: 'Only the host can change settings', code: 'hostOnly' });
       if (body.title != null) room.title = cleanText(body.title, 40) || room.title;
       if (body.currency != null) room.currency = cleanText(body.currency, 4) || room.currency;
       if (body.mode === 'classic' || body.mode === 'nover') room.mode = body.mode;
@@ -312,9 +312,9 @@ async function api(req, res, parts, url) {
       return json(res, 200, { ok: true });
     }
     case 'kick': {
-      if (!isHost) return json(res, 403, { error: 'Only the host can remove players' });
+      if (!isHost) return json(res, 403, { error: 'Only the host can remove players', code: 'hostOnly' });
       const target = room.players[body.target];
-      if (!target || target.id === room.hostId) return json(res, 400, { error: 'Cannot remove that player' });
+      if (!target || target.id === room.hostId) return json(res, 400, { error: 'Cannot remove that player', code: 'cannotRemove' });
       delete room.players[target.id];
       for (const r of room.rounds) delete r.guesses[target.id];
       broadcast(room);

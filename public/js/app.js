@@ -1,13 +1,15 @@
 // CheckMate — the browser app. Plain ES modules, no build step.
-import { computeRoundStats, leaderboard, fmtDuration } from './stats.js';
+import { computeRoundStats, leaderboard } from './stats.js';
+import { t, fmtDuration, errorText, getLang, setLang, applyLang } from './i18n.js';
 import { esc, fmtMoney, fmtPct, numberLine, errorBars, speedBars, pointsBars, installTooltips } from './charts.js';
 import { sfx, unlockAudio, confetti, floatEmoji, buzz, isMuted, setMuted } from './fx.js';
 
 const AVATARS = ['🍕', '🍔', '🌮', '🍣', '🥗', '🍝', '🥩', '🍤', '🧁', '🍷', '🍺', '🥂', '🦞', '🥑', '🌶️', '🍩', '🧀', '🍗', '🥐', '🍦'];
 const REACTIONS = ['😂', '🔥', '😱', '👏', '🍅', '💸', '🤑', '🙈'];
 const CURRENCIES = ['₪', '$', '€', '£', '¥', '₹'];
-const TRASH_TALK = ['Easy money 😎', 'I saw the menu prices 👀', 'Trust me, I’m an accountant', 'Pure instinct', 'Whoever loses pays 😈', 'Wine was NOT cheap', 'I always win this'];
-const NEXT_ROUND_IDEAS = ['Dessert 🍰', 'Drinks 🍷', 'Tip 💁', 'Next dinner 🍽️', 'Coffee ☕'];
+// Hebrew keyboard → the English letter on the same key, so codes can be typed without switching keyboards.
+const HE_KEYS = { '/': 'Q', "'": 'W', 'ק': 'E', 'ר': 'R', 'א': 'T', 'ט': 'Y', 'ו': 'U', 'ן': 'I', 'ם': 'O', 'פ': 'P', 'ש': 'A', 'ד': 'S', 'ג': 'D', 'כ': 'F', 'ע': 'G', 'י': 'H', 'ח': 'J', 'ל': 'K', 'ך': 'L', 'ז': 'Z', 'ס': 'X', 'ב': 'C', 'ה': 'V', 'נ': 'B', 'מ': 'N', 'צ': 'M' };
+const toCode = (v) => [...v].map(ch => HE_KEYS[ch] || ch).join('').replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4);
 
 const $app = document.getElementById('app');
 
@@ -40,12 +42,13 @@ const S = {
 
 // ---------- utilities ----------
 function toast(msg, ms = 2200) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove('show'), ms);
+  toast._t = setTimeout(() => el.classList.remove('show'), ms);
 }
+const toastErr = (err) => toast(errorText(err));
 async function api(path, body) {
   const res = await fetch(path, {
     method: body ? 'POST' : 'GET',
@@ -53,7 +56,7 @@ async function api(path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong'), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong'), { status: res.status, code: data.code });
   return data;
 }
 const act = (action, extra = {}) => api(`/api/rooms/${S.code}/${action}`, { pid: S.session.pid, token: S.session.token, ...extra });
@@ -95,7 +98,7 @@ async function openJoin(code) {
     S.joinInfo = await api(`/api/rooms/${code}`);
     go('join', code);
   } catch (e) {
-    toast(e.message);
+    toastErr(e);
     go('home');
   }
 }
@@ -139,7 +142,7 @@ function connect() {
       // Is the room gone, or were we removed? Then stop retrying.
       try { await api(`/api/rooms/${S.code}`); }
       catch (err) {
-        if (err.status === 404) { es.close(); store.del(sessionKey(S.code)); toast('That dinner table has closed 🍽️'); go('home'); }
+        if (err.status === 404) { es.close(); store.del(sessionKey(S.code)); toast(t('tableClosed')); go('home'); }
       }
     }
   };
@@ -147,7 +150,7 @@ function connect() {
 function kicked() {
   S.es?.close();
   store.del(sessionKey(S.code));
-  toast('You were removed from the table');
+  toast(t('removed'));
   go('home');
 }
 
@@ -161,7 +164,7 @@ function onStateChange(prev, next) {
   }
   const pr = prev.rounds[prev.rounds.length - 1];
   const nr = next.rounds[next.rounds.length - 1];
-  if (nr.n !== pr.n) { S.draft = { amount: '', quote: '', actual: '' }; S.editingGuess = false; sfx.pop(); toast(`New round: ${nr.label}`); return; }
+  if (nr.n !== pr.n) { S.draft = { amount: '', quote: '', actual: '' }; S.editingGuess = false; sfx.pop(); toast(t('newRound', { label: nr.label })); return; }
   if (pr.actual == null && nr.actual != null) { playReveal(nr); return; }
   // someone new locked in a guess
   const before = Object.keys(pr.guesses).length, after = Object.keys(nr.guesses).length;
@@ -171,8 +174,17 @@ function onStateChange(prev, next) {
   }
   if (next.players.length > prev.players.length) {
     const fresh = next.players.find(p => !prev.players.some(q => q.id === p.id));
-    if (fresh) { sfx.join(); toast(`${fresh.avatar} ${fresh.name} sat down at the table`); }
+    if (fresh) { sfx.join(); toast(t('satDown', { who: `${fresh.avatar} ${fresh.name}` })); }
   }
+}
+
+// ---------- translated bits of stats ----------
+const verdictText = (v) => `${v.emoji} ${t('verdicts.' + v.key)}`;
+function awardDetail(a) {
+  const v = { ...a.detail.vars };
+  if (v.ms != null) v.t = fmtDuration(v.ms);
+  if (v.pct != null) v.p = fmtPct(v.pct, false);
+  return t('details.' + a.detail.key, v);
 }
 
 // ---------- the big reveal ----------
@@ -185,8 +197,8 @@ function playReveal(r) {
   const mine = stats.rows.find(x => x.pid === S.session.pid);
   const ov = document.createElement('div');
   ov.className = 'overlay';
-  ov.innerHTML = `<div><div class="drum">🥁</div><div class="count pop">3</div><div class="sub">The real bill is…</div></div>
-    <button class="btn ghost skip">Skip ⏭</button>`;
+  ov.innerHTML = `<div><div class="drum">🥁</div><div class="count pop">3</div><div class="sub">${esc(t('realBillIs'))}</div></div>
+    <button class="btn ghost skip">${esc(t('skip'))}</button>`;
   document.body.appendChild(ov);
   const box = ov.firstElementChild;
   let done = false;
@@ -204,11 +216,11 @@ function playReveal(r) {
   }, (i + 1) * 1000));
   setTimeout(() => {
     if (done) return;
-    box.innerHTML = `<div class="sub">🧾 The real bill</div><div class="bill">${esc(cur())}0</div>`;
+    box.innerHTML = `<div class="sub">${esc(t('theRealBillOverlay'))}</div><div class="bill">${esc(fmtMoney(0, cur()))}</div>`;
     const billEl = box.querySelector('.bill');
     const t0 = performance.now(), dur = 1300;
-    const step = (t) => {
-      const k = Math.min(1, (t - t0) / dur);
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur);
       const eased = 1 - (1 - k) ** 3;
       billEl.textContent = fmtMoney(Math.round(stats.actual * eased), cur());
       if (k < 1) requestAnimationFrame(step);
@@ -218,13 +230,13 @@ function playReveal(r) {
         if (winner && !winner.busted) {
           const w = document.createElement('div');
           w.className = 'winner';
-          w.textContent = `♛ Checkmate! ${winner.avatar} ${winner.name} wins`;
+          w.textContent = t('checkmateWins', { who: `${winner.avatar} ${winner.name}` });
           box.appendChild(w);
         }
         if (mine) {
           const m = document.createElement('div');
           m.className = 'sub';
-          m.textContent = mine.rank === 1 && !mine.busted ? 'That’s YOU! 🎉' : `You were #${mine.rank} · ${mine.verdict.emoji} ${mine.verdict.text}`;
+          m.textContent = mine.rank === 1 && !mine.busted ? t('thatsYou') : t('youWere', { rank: mine.rank, verdict: verdictText(mine.verdict) });
           box.appendChild(m);
         }
         setTimeout(finish, 3200);
@@ -242,7 +254,7 @@ function render() {
   if (S.screen === 'home') $app.innerHTML = homeView();
   else if (S.screen === 'create') $app.innerHTML = createView();
   else if (S.screen === 'join') $app.innerHTML = joinView();
-  else if (S.screen === 'room') patch(S.room ? roomView() : `<div class="card center" style="margin-top:40vh">Connecting to the table… 🍽️</div>`);
+  else if (S.screen === 'room') patch(S.room ? roomView() : `<div class="card center" style="margin-top:40vh">${esc(t('connecting'))}</div>`);
   if (focused) {
     const el = document.getElementById(focused);
     if (el) { el.focus({ preventScroll: true }); try { if (selStart != null) el.setSelectionRange(selStart, selStart); } catch { /* number inputs */ } }
@@ -270,82 +282,89 @@ function patch(html) {
   });
 }
 
+const langButton = (cls = 'lang-btn') => `<button class="${cls}" data-action="lang" aria-label="${esc(t('switchAria'))}">${esc(t('switchTo'))}</button>`;
+
 function homeView() {
   return `
+  <div class="lang-row">${langButton()}</div>
   <div class="hero">
     <img class="logo-icon" src="/icon-256.png" width="128" height="128" alt="">
     <h1 class="logo">CheckMate</h1>
-    <p class="tagline">Guess the check. Checkmate the family. ♛</p>
+    <p class="tagline">${esc(t('tagline'))}</p>
   </div>
   <div class="card stack">
-    <button class="btn primary big block" data-go="create">🍽️ Start a new table</button>
+    <button class="btn primary big block" data-go="create">${esc(t('startTable'))}</button>
     <div class="row">
-      <input class="text code grow" id="home-code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" aria-label="Table code">
-      <button class="btn big" data-action="join-code">Join</button>
+      <input class="text code grow" id="home-code" maxlength="4" placeholder="${esc(t('codePh'))}" autocomplete="off" autocapitalize="characters" aria-label="${esc(t('codeAria'))}" dir="ltr">
+      <button class="btn big" data-action="join-code">${esc(t('join'))}</button>
     </div>
   </div>
   <div class="card">
-    <h2>How it works</h2>
+    <h2>${esc(t('howItWorks'))}</h2>
     <div class="how">
-      <div><b>📱</b>Everyone joins with the code or QR</div>
-      <div><b>🤔</b>Each person secretly guesses the total</div>
-      <div><b>🥁</b>Reveal the receipt &amp; see who nailed it</div>
+      <div><b>📱</b>${esc(t('how1'))}</div>
+      <div><b>🤔</b>${esc(t('how2'))}</div>
+      <div><b>🥁</b>${esc(t('how3'))}</div>
     </div>
   </div>
   ${recentTablesView()}
-  <p class="footer">♛ CheckMate · made for loud family dinners 🍷</p>`;
+  <p class="footer">${esc(t('footerHome'))}</p>`;
 }
 
 function recentTablesView() {
   const list = store.get('checkmate:recent') || [];
   if (!list.length) return '';
-  return `<div class="card"><h2>Your recent tables</h2><div class="chips">${list.slice(0, 5).map(t =>
-    `<button class="chip" data-action="open-recent" data-code="${esc(t.code)}">${esc(t.title)} · ${esc(t.code)}</button>`).join('')}</div></div>`;
+  return `<div class="card"><h2>${esc(t('recentTables'))}</h2><div class="chips">${list.slice(0, 5).map(x =>
+    `<button class="chip" data-action="open-recent" data-code="${esc(x.code)}">${esc(x.title)} · ${esc(x.code)}</button>`).join('')}</div></div>`;
 }
 
 function avatarPicker(taken = []) {
-  return `<div class="avatar-grid" role="group" aria-label="Pick your food avatar">${AVATARS.map(a =>
+  return `<div class="avatar-grid" role="group" aria-label="${esc(t('pickAvatarAria'))}">${AVATARS.map(a =>
     `<button type="button" class="avatar-btn ${taken.includes(a) && a !== S.profile.avatar ? 'taken' : ''}" data-avatar="${a}" aria-pressed="${a === S.profile.avatar}">${a}</button>`).join('')}</div>`;
 }
+
+const modeButtons = (attr, current) => `
+  <div class="seg">
+    <button type="button" ${attr}="classic" aria-pressed="${current === 'classic'}">${esc(t('modeClassic'))}</button>
+    <button type="button" ${attr}="nover" aria-pressed="${current === 'nover'}">${esc(t('modeNover'))}</button>
+  </div>`;
 
 function createView() {
   const o = S.createOpts;
   return `
-  <div class="topbar"><button class="btn icon ghost" data-go="home" aria-label="Back">←</button><h1>New dinner table</h1></div>
+  <div class="topbar"><button class="btn icon ghost" data-go="home" aria-label="${esc(t('back'))}">${t('backArrow')}</button><h1>${esc(t('newTable'))}</h1>${langButton('lang-btn small-lang')}</div>
   <form class="card stack" data-form="create">
-    <label class="field"><span>Your name</span><input class="text" id="c-name" name="name" maxlength="24" required placeholder="e.g. Dad" value="${esc(S.profile.name)}" autocomplete="nickname"></label>
-    <div class="field"><span class="small muted" style="font-weight:600">Your avatar</span>${avatarPicker()}</div>
-    <label class="field"><span>Where are we eating?</span><input class="text" id="c-title" name="title" maxlength="40" placeholder="Family dinner at Nonna’s" value="${esc(o.title)}"></label>
-    <div class="field"><span class="small muted" style="font-weight:600">Currency</span>
+    <label class="field"><span>${esc(t('yourName'))}</span><input class="text" dir="auto" id="c-name" name="name" maxlength="24" required placeholder="${esc(t('namePhHost'))}" value="${esc(S.profile.name)}" autocomplete="nickname"></label>
+    <div class="field"><span class="small muted" style="font-weight:600">${esc(t('yourAvatar'))}</span>${avatarPicker()}</div>
+    <label class="field"><span>${esc(t('whereEating'))}</span><input class="text" dir="auto" id="c-title" name="title" maxlength="40" placeholder="${esc(t('titlePh'))}" value="${esc(o.title)}"></label>
+    <div class="field"><span class="small muted" style="font-weight:600">${esc(t('currency'))}</span>
       <div class="chips">${CURRENCIES.map(c => `<button type="button" class="chip" data-currency="${c}" aria-pressed="${c === o.currency}">${c}</button>`).join('')}</div>
     </div>
-    <div class="field"><span class="small muted" style="font-weight:600">Rules</span>
-      <div class="seg">
-        <button type="button" data-mode="classic" aria-pressed="${o.mode === 'classic'}">🎯 Closest wins</button>
-        <button type="button" data-mode="nover" aria-pressed="${o.mode === 'nover'}">💥 Don’t go over</button>
-      </div>
-      <p class="small muted" style="margin-top:6px">${o.mode === 'nover' ? 'Closest guess WITHOUT going over the real bill wins. Guess too high = busted!' : 'Whoever is closest to the real bill wins — over or under.'}</p>
+    <div class="field"><span class="small muted" style="font-weight:600">${esc(t('rules'))}</span>
+      ${modeButtons('data-mode', o.mode)}
+      <p class="small muted" style="margin-top:6px">${esc(t(o.mode === 'nover' ? 'modeNoverDesc' : 'modeClassicDesc'))}</p>
     </div>
-    <button class="btn primary big block" type="submit">Open the table 🚪</button>
+    <button class="btn primary big block" type="submit">${esc(t('openTable'))}</button>
   </form>`;
 }
 
 function joinView() {
   const info = S.joinInfo || { players: [], takenAvatars: [] };
   return `
-  <div class="hero" style="padding-top:12px">
-    <span class="logo-emoji">🍽️</span>
-    <h1 class="display" style="font-size:1.8rem">${esc(info.title || 'Dinner table')}</h1>
-    <p class="tagline">Table <b>${esc(S.code)}</b> · ${info.players.length} at the table</p>
+  <div class="lang-row">${langButton()}</div>
+  <div class="hero" style="padding-top:4px">
+    <img class="logo-icon small" src="/icon-256.png" width="84" height="84" alt="">
+    <h1 class="display" style="font-size:1.8rem" dir="auto">${esc(info.title || t('dinnerTable'))}</h1>
+    <p class="tagline">${esc(t('tableInfo', { code: S.code, n: info.players.length }))}</p>
     <p class="tagline">${info.players.map(p => esc(p.avatar)).join(' ')}</p>
   </div>
   <form class="card stack" data-form="join">
-    <label class="field"><span>Your name</span><input class="text" id="j-name" name="name" maxlength="24" required placeholder="e.g. Grandma" value="${esc(S.profile.name)}" autocomplete="nickname"></label>
-    <div class="field"><span class="small muted" style="font-weight:600">Pick your avatar</span>${avatarPicker(info.takenAvatars)}</div>
-    <button class="btn primary big block" type="submit">Sit down 🪑</button>
-    <p class="small muted center">Already joined on another phone? Use the same name to take your seat back.</p>
+    <label class="field"><span>${esc(t('yourName'))}</span><input class="text" dir="auto" id="j-name" name="name" maxlength="24" required placeholder="${esc(t('namePhJoin'))}" value="${esc(S.profile.name)}" autocomplete="nickname"></label>
+    <div class="field"><span class="small muted" style="font-weight:600">${esc(t('pickAvatar'))}</span>${avatarPicker(info.takenAvatars)}</div>
+    <button class="btn primary big block" type="submit">${esc(t('sitDown'))}</button>
+    <p class="small muted center">${esc(t('rejoinHint'))}</p>
   </form>
-  <p class="footer"><button data-go="home">← Back home</button></p>`;
+  <p class="footer"><button data-go="home">${esc(t('backHome'))}</button></p>`;
 }
 
 function roomView() {
@@ -353,18 +372,18 @@ function roomView() {
   const revealed = r.actual != null;
   return `
   <div class="topbar" data-key="top">
-    <button class="btn icon ghost" data-action="leave" aria-label="Home">🏠</button>
-    <h1>${esc(S.room.title)}</h1>
-    <button class="btn icon ghost" data-action="mute" aria-label="${isMuted() ? 'Unmute' : 'Mute'}">${isMuted() ? '🔇' : '🔊'}</button>
-    <button class="code-pill" data-action="share" aria-label="Share the table code">${esc(S.room.code)} 📲</button>
+    <button class="btn icon ghost" data-action="leave" aria-label="${esc(t('home'))}">🏠</button>
+    <h1 dir="auto">${esc(S.room.title)}</h1>
+    <button class="btn icon ghost" data-action="mute" aria-label="${esc(t(isMuted() ? 'unmute' : 'mute'))}">${isMuted() ? '🔇' : '🔊'}</button>
+    <button class="code-pill" data-action="share" aria-label="${esc(t('shareAria'))}" dir="ltr">${esc(S.room.code)} 📲</button>
   </div>
   <div class="row wrap" style="margin-bottom:12px" data-key="tags">
     <span class="round-tag">🍽️ ${esc(r.label)}</span>
-    ${S.room.rounds.length > 1 ? `<span class="round-tag">Round ${r.n}</span>` : ''}
-    <span class="round-tag">${S.room.mode === 'nover' ? '💥 Don’t go over' : '🎯 Closest wins'}</span>
+    ${S.room.rounds.length > 1 ? `<span class="round-tag">${esc(t('roundN', { n: r.n }))}</span>` : ''}
+    <span class="round-tag">${esc(t(S.room.mode === 'nover' ? 'modeNover' : 'modeClassic'))}</span>
   </div>
   ${revealed ? resultsView(r) : guessingView(r)}
-  <p class="footer" data-key="foot">${isHost() ? `<button data-action="settings">⚙️ Table settings</button> · ` : ''}<button data-action="profile">✏️ Change my name/avatar</button></p>`;
+  <p class="footer" data-key="foot">${isHost() ? `<button data-action="settings">${esc(t('settingsLink'))}</button> · ` : ''}<button data-action="profile">${esc(t('profileLink'))}</button> · ${langButton('link-lang')}</p>`;
 }
 
 function guessingView(r) {
@@ -374,45 +393,46 @@ function guessingView(r) {
   const elapsed = Math.max(0, serverNow() - r.startedAt);
   const showForm = !mine || S.editingGuess;
   const waitingFor = S.room.players.filter(p => !r.guesses[p.id]);
+  const trash = t('trash');
   return `
-  <section class="card stack" data-key="guess" data-sig="${esc(`${r.n}|${showForm}|${mine?.amount}|${mine?.quote}|${cur()}`)}">
+  <section class="card stack" data-key="guess" data-sig="${esc(`${getLang()}|${r.n}|${showForm}|${mine?.amount}|${mine?.quote}|${cur()}`)}">
     ${showForm ? `
-      <div class="row spread"><h2 style="margin:0">What’s the total bill? 🤔</h2><span class="timer" data-timer="${r.startedAt}">⏱ ${fmtDuration(elapsed)}</span></div>
+      <div class="row spread"><h2 style="margin:0">${esc(t('whatTotal'))}</h2><span class="timer" data-timer="${r.startedAt}">⏱ ${esc(fmtDuration(elapsed))}</span></div>
       <form data-form="guess" class="stack">
         <div class="money-input"><span class="cur">${esc(cur())}</span>
-          <input id="g-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(S.draft.amount)}" aria-label="Your guess for the total bill" required>
+          <input id="g-amount" name="amount" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(S.draft.amount)}" aria-label="${esc(t('guessAria'))}" required>
         </div>
-        <label class="field"><span>Trash talk (optional) 😈</span>
-          <input class="text" id="g-quote" name="quote" maxlength="60" placeholder="${esc(TRASH_TALK[r.n % TRASH_TALK.length])}" value="${esc(S.draft.quote)}">
+        <label class="field"><span>${esc(t('trashTalk'))}</span>
+          <input class="text" dir="auto" id="g-quote" name="quote" maxlength="60" placeholder="${esc(trash[r.n % trash.length])}" value="${esc(S.draft.quote)}">
         </label>
-        <button class="btn primary big block" type="submit">${mine ? 'Update my guess ✏️' : 'Lock it in 🔒'}</button>
-        ${mine ? `<button class="btn ghost block" type="button" data-action="cancel-edit">Keep ${esc(fmtMoney(mine.amount, cur()))}</button>` : ''}
-        <p class="small muted center">Nobody sees your number until the reveal. Speed counts for the ⚡ award!</p>
+        <button class="btn primary big block" type="submit">${esc(t(mine ? 'updateGuess' : 'lockIn'))}</button>
+        ${mine ? `<button class="btn ghost block" type="button" data-action="cancel-edit">${esc(t('keep', { amount: fmtMoney(mine.amount, cur()) }))}</button>` : ''}
+        <p class="small muted center">${esc(t('secretHint'))}</p>
       </form>` : `
       <div class="my-guess">
-        <span class="locked-badge">✅ Locked in after ${fmtDuration(mine.firstAt - r.startedAt)}</span>
+        <span class="locked-badge">${esc(t('lockedAfter', { t: fmtDuration(mine.firstAt - r.startedAt) }))}</span>
         <div class="amt">${esc(fmtMoney(mine.amount, cur()))}</div>
         ${mine.quote ? `<p class="muted">“${esc(mine.quote)}”</p>` : ''}
-        <button class="btn ghost" data-action="edit-guess" style="margin-top:8px">Change my mind 🔄</button>
+        <button class="btn ghost" data-action="edit-guess" style="margin-top:8px">${esc(t('changeMind'))}</button>
       </div>`}
   </section>
 
   <section class="card stack" data-key="players">
-    <div class="row spread"><h2 style="margin:0">At the table</h2><span class="muted small">${done}/${total} guessed</span></div>
+    <div class="row spread"><h2 style="margin:0">${esc(t('atTable'))}</h2><span class="muted small">${esc(t('guessedCount', { done, total }))}</span></div>
     <div class="progress" aria-hidden="true"><i style="width:${total ? (done / total) * 100 : 0}%"></i></div>
     <div class="players">${S.room.players.map(p => playerCard(p, r)).join('')}</div>
-    ${waitingFor.length && done ? `<p class="small muted">Waiting for ${waitingFor.map(p => esc(p.avatar + ' ' + p.name)).join(', ')}… 👀</p>` : ''}
-    ${total === 1 ? `<button class="btn block" data-action="share">📲 Invite the family</button>` : ''}
+    ${waitingFor.length && done ? `<p class="small muted">${esc(t('waitingFor', { names: waitingFor.map(p => p.avatar + ' ' + p.name).join(', ') }))}</p>` : ''}
+    ${total === 1 ? `<button class="btn block" data-action="share">${esc(t('inviteFamily'))}</button>` : ''}
   </section>
 
-  <section class="card stack" data-key="reveal" data-sig="${esc(`${r.n}|${done > 0}|${cur()}`)}">
-    <h2 style="margin:0">🧾 Got the receipt?</h2>
-    <p class="small muted">Whoever holds the bill types the real total. Everyone’s phone will do the big reveal together.</p>
+  <section class="card stack" data-key="reveal" data-sig="${esc(`${getLang()}|${r.n}|${done > 0}|${cur()}`)}">
+    <h2 style="margin:0">${esc(t('gotReceipt'))}</h2>
+    <p class="small muted">${esc(t('receiptHint'))}</p>
     <form data-form="reveal" class="row">
       <div class="money-input grow"><span class="cur" style="font-size:1.4rem;left:14px">${esc(cur())}</span>
-        <input id="r-actual" name="actual" inputmode="decimal" autocomplete="off" placeholder="Real total" value="${esc(S.draft.actual)}" style="font-size:1.6rem;min-height:58px;padding-left:40px" aria-label="Real total from the receipt">
+        <input id="r-actual" name="actual" inputmode="decimal" autocomplete="off" placeholder="${esc(t('realTotalPh'))}" value="${esc(S.draft.actual)}" style="font-size:1.6rem;min-height:58px;padding-left:40px" aria-label="${esc(t('realTotalAria'))}">
       </div>
-      <button class="btn hot big" type="submit" ${done ? '' : 'disabled'}>Reveal 🥁</button>
+      <button class="btn hot big" type="submit" ${done ? '' : 'disabled'}>${esc(t('reveal'))}</button>
     </form>
   </section>`;
 }
@@ -420,13 +440,13 @@ function guessingView(r) {
 function playerCard(p, r) {
   const g = r.guesses[p.id];
   const isMe = p.id === S.session.pid;
-  const status = g ? `✓ in ${fmtDuration((g.firstAt ?? g.at) - r.startedAt)}` : 'thinking…';
+  const status = g ? t('inTime', { t: fmtDuration((g.firstAt ?? g.at) - r.startedAt) }) : t('thinking');
   return `<div class="player ${g ? 'done' : 'thinking'} ${isMe ? 'me' : ''}">
-    <span class="dot ${p.online ? 'on' : ''}" title="${p.online ? 'online' : 'offline'}"></span>
-    ${isHost() && !isMe && p.id !== S.room.hostId ? `<button class="kick" data-action="kick" data-pid="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">✕</button>` : ''}
+    <span class="dot ${p.online ? 'on' : ''}" title="${esc(t(p.online ? 'online' : 'offline'))}"></span>
+    ${isHost() && !isMe && p.id !== S.room.hostId ? `<button class="kick" data-action="kick" data-pid="${esc(p.id)}" aria-label="${esc(t('removeX', { name: p.name }))}">✕</button>` : ''}
     <span class="av">${esc(p.avatar)}</span>
-    <span class="nm">${esc(p.name)}${p.id === S.room.hostId ? ' 👑' : ''}</span>
-    <span class="st">${status}</span>
+    <span class="nm" dir="auto">${esc(p.name)}${p.id === S.room.hostId ? ' 👑' : ''}</span>
+    <span class="st">${esc(status)}</span>
   </div>`;
 }
 
@@ -439,104 +459,104 @@ function resultsView(r) {
   const people = S.split.people ?? S.room.players.length;
   const perPerson = (stats.actual * (1 + S.split.tip / 100)) / Math.max(1, people);
   const revealer = playerById(r.revealedBy);
+  const last = stats.rows[stats.rows.length - 1];
   const step = (row, cls, medal) => row ? `<div class="step ${cls}"><div class="medal">${medal}</div><span class="av">${esc(row.avatar)}</span><span class="nm">${esc(row.name)}</span><span class="gs">${esc(fmtMoney(row.amount, c))}</span><div class="small muted">${esc(fmtPct(row.pct))}</div></div>` : '<div></div>';
 
   return `
   <section class="card bill-hero">
-    <div class="lbl">The real bill</div>
+    <div class="lbl">${esc(t('theRealBill'))}</div>
     <div class="val">${esc(fmtMoney(stats.actual, c))}</div>
-    <p class="muted small">${revealer ? `revealed by ${esc(revealer.avatar + ' ' + revealer.name)}` : ''}</p>
-    ${mine ? `<p style="margin-top:10px;font-weight:650">You: ${esc(fmtMoney(mine.amount, c))} · #${mine.rank} of ${stats.n} · ${esc(mine.verdict.emoji + ' ' + mine.verdict.text)}</p>` : `<p class="muted" style="margin-top:10px">You didn’t guess this round 🙊</p>`}
+    <p class="muted small">${revealer ? esc(t('revealedBy', { who: revealer.avatar + ' ' + revealer.name })) : ''}</p>
+    ${mine ? `<p style="margin-top:10px;font-weight:650">${esc(t('youLine', { amount: fmtMoney(mine.amount, c), rank: mine.rank, n: stats.n, verdict: verdictText(mine.verdict) }))}</p>` : `<p class="muted" style="margin-top:10px">${esc(t('didntGuess'))}</p>`}
     <div class="kpis">
-      <div class="kpi"><div class="k">Average</div><div class="v">${esc(fmtMoney(Math.round(stats.average), c))}</div><div class="s">${esc(fmtPct(stats.avgPct))}</div></div>
-      <div class="kpi"><div class="k">Median</div><div class="v">${esc(fmtMoney(Math.round(stats.median), c))}</div><div class="s">${esc(fmtPct((stats.median - stats.actual) / stats.actual * 100))}</div></div>
-      <div class="kpi"><div class="k">Range</div><div class="v" style="font-size:1rem">${esc(compactMoney(stats.min, c))}–${esc(compactMoney(stats.max, c))}</div><div class="s">${stats.under}⬇ ${stats.over}⬆</div></div>
+      <div class="kpi"><div class="k">${esc(t('average'))}</div><div class="v">${esc(fmtMoney(Math.round(stats.average), c))}</div><div class="s">${esc(fmtPct(stats.avgPct))}</div></div>
+      <div class="kpi"><div class="k">${esc(t('median'))}</div><div class="v">${esc(fmtMoney(Math.round(stats.median), c))}</div><div class="s">${esc(fmtPct((stats.median - stats.actual) / stats.actual * 100))}</div></div>
+      <div class="kpi"><div class="k">${esc(t('range'))}</div><div class="v" style="font-size:1rem" dir="ltr">${esc(compactMoney(stats.min, c))}–${esc(compactMoney(stats.max, c))}</div><div class="s" dir="ltr">${stats.under}⬇ ${stats.over}⬆</div></div>
     </div>
   </section>
 
   <section class="card">
-    <h2>🏆 The podium</h2>
-    <div class="podium">${step(p2, 'p2', '🥈')}${step(p1, 'p1', p1?.busted ? '💥' : '🥇')}${step(p3, 'p3', '🥉')}</div>
+    <h2>${esc(t('podium'))}</h2>
+    <div class="podium" dir="ltr">${step(p2, 'p2', '🥈')}${step(p1, 'p1', p1?.busted ? '💥' : '🥇')}${step(p3, 'p3', '🥉')}</div>
   </section>
 
   <section class="card">
-    <h2>🧠 Wisdom of the crowd</h2>
-    <p>${crowdText(stats)}</p>
+    <h2>${esc(t('crowdTitle'))}</h2>
+    <p>${esc(crowdText(stats))}</p>
   </section>
 
   <section class="card">
-    <h2>📍 Where everyone landed</h2>
+    <h2>${esc(t('whereLanded'))}</h2>
     <div class="chart-box" data-chart="line"></div>
-    <div class="legend"><span><i class="ln"></i>Real bill</span><span><i class="ln avg"></i>Group average</span><span class="muted">Tap a face for details</span></div>
+    <div class="legend"><span><i class="ln"></i>${esc(t('legendReal'))}</span><span><i class="ln avg"></i>${esc(t('legendAvg'))}</span><span class="muted">${esc(t('tapFace'))}</span></div>
   </section>
 
   <section class="card">
-    <h2>🎯 How far off?</h2>
+    <h2>${esc(t('howFar'))}</h2>
     <div class="chart-box" data-chart="error"></div>
-    <div class="legend"><span><i style="background:var(--under)"></i>Guessed too low</span><span><i style="background:var(--over)"></i>Guessed too high</span></div>
+    <div class="legend"><span><i style="background:var(--under)"></i>${esc(t('legendLow'))}</span><span><i style="background:var(--over)"></i>${esc(t('legendHigh'))}</span></div>
   </section>
 
   <section class="card">
-    <h2>⚡ The speed race</h2>
+    <h2>${esc(t('speedRace'))}</h2>
     <div class="chart-box" data-chart="speed"></div>
   </section>
 
   <section class="card">
-    <h2>🎖️ Awards night</h2>
-    <div class="awards">${stats.awards.map(a => `<div class="award"><div class="e">${a.emoji}</div><div class="t">${esc(a.title)}</div><div class="w">${esc(a.who.avatar + ' ' + a.who.name)}</div><div class="d">${esc(a.detail)}</div></div>`).join('')}</div>
+    <h2>${esc(t('awardsNight'))}</h2>
+    <div class="awards">${stats.awards.map(a => `<div class="award"><div class="e">${a.emoji}</div><div class="t">${esc(t('awards.' + a.type))}</div><div class="w">${esc(a.who.avatar + ' ' + a.who.name)}</div><div class="d">${esc(awardDetail(a))}</div></div>`).join('')}</div>
   </section>
 
   <section class="card">
-    <h2>📋 Full results</h2>
+    <h2>${esc(t('fullResults'))}</h2>
     <table class="rank-table">
-      <thead><tr><th>#</th><th>Who</th><th class="num">Guess</th><th class="num">Off</th></tr></thead>
+      <thead><tr><th>#</th><th>${esc(t('colWho'))}</th><th class="num">${esc(t('colGuess'))}</th><th class="num">${esc(t('colOff'))}</th></tr></thead>
       <tbody>${stats.rows.map(x => `<tr class="${x.pid === S.session.pid ? 'me' : ''}">
         <td>${x.rank}</td>
-        <td class="who">${esc(x.avatar + ' ' + x.name)}<span class="vd">${esc(x.verdict.emoji + ' ' + x.verdict.text)} · ${esc(fmtDuration(x.firstTimeMs))}</span>${x.quote ? `<span class="q">“${esc(x.quote)}”</span>` : ''}</td>
+        <td class="who">${esc(x.avatar + ' ' + x.name)}<span class="vd">${esc(verdictText(x.verdict))} · ${esc(fmtDuration(x.firstTimeMs))}</span>${x.quote ? `<span class="q">“${esc(x.quote)}”</span>` : ''}</td>
         <td class="num">${esc(fmtMoney(x.amount, c))}</td>
-        <td class="num ${x.diff > 0 ? 'pos' : x.diff < 0 ? 'neg' : ''}">${esc(fmtPct(x.pct))}<span class="vd">${x.diff === 0 ? 'exact!' : esc((x.diff > 0 ? '+' : '−') + fmtMoney(x.absDiff, c))}</span></td>
+        <td class="num ${x.diff > 0 ? 'pos' : x.diff < 0 ? 'neg' : ''}">${esc(fmtPct(x.pct))}<span class="vd">${esc(x.diff === 0 ? t('exact') : (x.diff > 0 ? '+' : '−') + fmtMoney(x.absDiff, c))}</span></td>
       </tr>`).join('')}</tbody>
     </table>
-    <p class="small muted" style="margin-top:10px">Points: 🥇 5 · 🥈 3 · 🥉 2 · everyone else 1 · 🎯 bullseye (within 1%) +3${S.room.mode === 'nover' ? ' · 💥 busted 0' : ''}</p>
+    <p class="small muted" style="margin-top:10px">${esc(t('pointsRule') + (S.room.mode === 'nover' ? t('pointsRuleBust') : ''))}</p>
   </section>
 
   ${board.length && S.room.rounds.filter(x => x.actual != null).length > 1 ? `
   <section class="card">
-    <h2>👑 Overall leaderboard</h2>
+    <h2>${esc(t('overall'))}</h2>
     <div class="chart-box" data-chart="points"></div>
   </section>` : ''}
 
-  <section class="card stack" data-key="split" data-sig="${esc(`${r.n}|${people}|${c}`)}">
-    <h2 style="margin:0">💳 Split the bill</h2>
-    <div class="row spread"><span>Tip</span><b id="split-tip-val">${S.split.tip}%</b></div>
-    <input type="range" id="split-tip" min="0" max="25" step="1" value="${S.split.tip}" aria-label="Tip percent">
-    <div class="row spread"><span>People paying</span>
-      <div class="row"><button class="btn icon" data-action="people" data-d="-1" aria-label="Fewer people">−</button><b style="min-width:2ch;text-align:center">${people}</b><button class="btn icon" data-action="people" data-d="1" aria-label="More people">+</button></div>
+  <section class="card stack" data-key="split" data-sig="${esc(`${getLang()}|${r.n}|${people}|${c}`)}">
+    <h2 style="margin:0">${esc(t('split'))}</h2>
+    <div class="row spread"><span>${esc(t('tip'))}</span><b id="split-tip-val">${S.split.tip}%</b></div>
+    <input type="range" id="split-tip" min="0" max="25" step="1" value="${S.split.tip}" aria-label="${esc(t('tipAria'))}">
+    <div class="row spread"><span>${esc(t('peoplePaying'))}</span>
+      <div class="row" dir="ltr"><button class="btn icon" data-action="people" data-d="-1" aria-label="${esc(t('fewer'))}">−</button><b style="min-width:2ch;text-align:center">${people}</b><button class="btn icon" data-action="people" data-d="1" aria-label="${esc(t('more'))}">+</button></div>
     </div>
-    <div class="center"><div class="muted small">Each person pays</div><div class="split-out" id="split-each">${esc(fmtMoney(Math.ceil(perPerson * 100) / 100, c))}</div>
-    <div class="muted small" id="split-total">Total with tip ${esc(fmtMoney(Math.round(stats.actual * (1 + S.split.tip / 100) * 100) / 100, c))}</div></div>
-    ${p1 && stats.n > 1 ? `<p class="small center">😈 Fun rule: <b>${esc(stats.rows[stats.rows.length - 1].avatar + ' ' + stats.rows[stats.rows.length - 1].name)}</b> (farthest off) buys dessert!</p>` : ''}
+    <div class="center"><div class="muted small">${esc(t('eachPays'))}</div><div class="split-out" id="split-each">${esc(fmtMoney(Math.ceil(perPerson * 100) / 100, c))}</div>
+    <div class="muted small" id="split-total">${esc(t('totalWithTip', { x: fmtMoney(Math.round(stats.actual * (1 + S.split.tip / 100) * 100) / 100, c) }))}</div></div>
+    ${p1 && stats.n > 1 ? `<p class="small center">${esc(t('funRule', { who: last.avatar + ' ' + last.name }))}</p>` : ''}
   </section>
 
   <section class="card stack">
-    <button class="btn block" data-action="share-results">📤 Share the results</button>
-    <h2 style="margin:6px 0 0">Play again?</h2>
-    <div class="chips">${NEXT_ROUND_IDEAS.map(x => `<button class="chip" data-action="next-round" data-label="${esc(x)}">${esc(x)}</button>`).join('')}</div>
-    <p class="small muted">Starts a new round at this table — points keep adding up on the leaderboard.</p>
+    <button class="btn block" data-action="share-results">${esc(t('shareResults'))}</button>
+    <h2 style="margin:6px 0 0">${esc(t('playAgain'))}</h2>
+    <div class="chips">${t('nextIdeas').map(x => `<button class="chip" data-action="next-round" data-label="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+    <p class="small muted">${esc(t('playAgainHint'))}</p>
   </section>`;
 }
 
 const compactMoney = (v, c) => (v >= 10000 ? c + (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : fmtMoney(Math.round(v), c));
 
 function crowdText(s) {
-  if (s.n < 2) return 'Only one guess this round — the crowd needs more people! 👥';
+  if (s.n < 2) return t('crowdOne');
   const off = Math.abs(s.avgPct);
-  const beat = s.crowdBeats;
-  const how = off < 3 ? 'scary close 😳' : off < 10 ? 'pretty close 👍' : off < 25 ? 'a bit off 🤷' : 'way off 🙈';
-  return `The group average (${esc(fmtMoney(Math.round(s.average), cur()))}) was ${esc(fmtPct(s.avgPct, false))} ${s.avgDiff >= 0 ? 'over' : 'under'} — ${how}. ` +
-    (beat === s.n ? `It beat <b>everyone</b> individually. Together you’re smarter! 🧠` :
-      beat === 0 ? `But every single person beat the average. Individually brilliant! ✨` :
-        `It beat <b>${beat} of ${s.n}</b> people. ${s.over > s.under ? 'Most of you guessed too high — feeling rich? 💸' : s.under > s.over ? 'Most of you guessed too low — this place is pricier than you think 🧾' : 'Perfectly split between over and under ⚖️'}`);
+  const how = t('crowdHow')[off < 3 ? 0 : off < 10 ? 1 : off < 25 ? 2 : 3];
+  const main = t('crowdMain', { avg: fmtMoney(Math.round(s.average), cur()), pct: fmtPct(s.avgPct, false), over: s.avgDiff >= 0, how });
+  if (s.crowdBeats === s.n) return main + t('crowdAll');
+  if (s.crowdBeats === 0) return main + t('crowdNone');
+  return main + t('crowdSome', { beat: s.crowdBeats, n: s.n }) + t(s.over > s.under ? 'crowdMostOver' : s.under > s.over ? 'crowdMostUnder' : 'crowdSplit');
 }
 
 function sizeCharts() {
@@ -562,8 +582,8 @@ function renderReactBar() {
   bar = document.createElement('div');
   bar.className = 'react-bar';
   bar.setAttribute('role', 'toolbar');
-  bar.setAttribute('aria-label', 'Send a reaction to everyone');
-  bar.innerHTML = REACTIONS.map(e => `<button data-react="${e}" aria-label="Send ${e}">${e}</button>`).join('');
+  bar.setAttribute('dir', 'ltr');
+  bar.innerHTML = REACTIONS.map(e => `<button data-react="${e}" aria-label="${e}">${e}</button>`).join('');
   document.body.appendChild(bar);
 }
 
@@ -590,26 +610,26 @@ function shareModal() {
   const url = shareUrl(S.code);
   modal(`
     <div class="stack center">
-      <h2>Invite the table 📲</h2>
+      <h2>${esc(t('inviteTitle'))}</h2>
       <div class="qr">${qrSvg(url)}</div>
-      <p class="muted small">Scan with the phone camera, or enter the code</p>
-      <div class="big-code">${esc(S.code)}</div>
-      <div class="link-box">${esc(url)}</div>
+      <p class="muted small">${esc(t('scanHint'))}</p>
+      <div class="big-code" dir="ltr">${esc(S.code)}</div>
+      <div class="link-box" dir="ltr">${esc(url)}</div>
       <div class="row">
-        <button class="btn grow" data-act="copy">📋 Copy link</button>
-        ${navigator.share ? `<button class="btn primary grow" data-act="native">📤 Send…</button>` : ''}
+        <button class="btn grow" data-act="copy">${esc(t('copyLink'))}</button>
+        ${navigator.share ? `<button class="btn primary grow" data-act="native">${esc(t('send'))}</button>` : ''}
       </div>
-      <button class="btn ghost block" data-close>Done</button>
+      <button class="btn ghost block" data-close>${esc(t('done'))}</button>
     </div>`, (el) => {
     el.querySelector('[data-act="copy"]').onclick = () => copy(url);
     el.querySelector('[data-act="native"]')?.addEventListener('click', () =>
-      navigator.share({ title: 'CheckMate ♛', text: `Join our CheckMate table! Guess the dinner bill 🍽️ Code: ${S.code}`, url }).catch(() => {}));
+      navigator.share({ title: 'CheckMate ♛', text: t('inviteText', { code: S.code }), url }).catch(() => {}));
   });
 }
 
 async function copy(text) {
-  try { await navigator.clipboard.writeText(text); toast('Copied! 📋'); }
-  catch { toast('Copy failed — long-press to copy'); }
+  try { await navigator.clipboard.writeText(text); toast(t('copied')); }
+  catch { toast(t('copyFailed')); }
 }
 
 function profileModal() {
@@ -617,11 +637,11 @@ function profileModal() {
   S.profile = { name: m.name, avatar: m.avatar };
   modal(`
     <form class="stack" data-modal-form="profile">
-      <h2>You</h2>
-      <label class="field"><span>Name</span><input class="text" name="name" maxlength="24" value="${esc(m.name)}" required></label>
+      <h2>${esc(t('profileTitle'))}</h2>
+      <label class="field"><span>${esc(t('name'))}</span><input class="text" name="name" maxlength="24" value="${esc(m.name)}" required></label>
       ${avatarPicker(S.room.players.map(p => p.avatar))}
-      <button class="btn primary block" type="submit">Save</button>
-      <button class="btn ghost block" type="button" data-close>Cancel</button>
+      <button class="btn primary block" type="submit">${esc(t('save'))}</button>
+      <button class="btn ghost block" type="button" data-close>${esc(t('cancel'))}</button>
     </form>`, (el, close) => {
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-avatar]');
@@ -633,7 +653,7 @@ function profileModal() {
       e.preventDefault();
       const name = new FormData(e.target).get('name');
       try { await act('profile', { name, avatar: S.profile.avatar }); S.profile.name = name; saveProfile(); close(); }
-      catch (err) { toast(err.message); }
+      catch (err) { toastErr(err); }
     };
   });
 }
@@ -642,17 +662,14 @@ function settingsModal() {
   const r = round();
   modal(`
     <form class="stack" data-modal-form="settings">
-      <h2>⚙️ Table settings</h2>
-      <label class="field"><span>Table name</span><input class="text" name="title" maxlength="40" value="${esc(S.room.title)}"></label>
-      ${r.actual == null ? `<label class="field"><span>This round is called</span><input class="text" name="roundLabel" maxlength="40" value="${esc(r.label)}"></label>` : ''}
-      <div class="field"><span class="small muted" style="font-weight:600">Currency</span>
+      <h2>${esc(t('settingsTitle'))}</h2>
+      <label class="field"><span>${esc(t('tableName'))}</span><input class="text" name="title" maxlength="40" value="${esc(S.room.title)}"></label>
+      ${r.actual == null ? `<label class="field"><span>${esc(t('roundCalled'))}</span><input class="text" name="roundLabel" maxlength="40" value="${esc(r.label)}"></label>` : ''}
+      <div class="field"><span class="small muted" style="font-weight:600">${esc(t('currency'))}</span>
         <div class="chips">${CURRENCIES.map(c => `<button type="button" class="chip" data-cur="${c}" aria-pressed="${c === S.room.currency}">${c}</button>`).join('')}</div></div>
-      <div class="seg">
-        <button type="button" data-m="classic" aria-pressed="${S.room.mode === 'classic'}">🎯 Closest wins</button>
-        <button type="button" data-m="nover" aria-pressed="${S.room.mode === 'nover'}">💥 Don’t go over</button>
-      </div>
-      <button class="btn primary block" type="submit">Save</button>
-      <button class="btn ghost block" type="button" data-close>Cancel</button>
+      ${modeButtons('data-m', S.room.mode)}
+      <button class="btn primary block" type="submit">${esc(t('save'))}</button>
+      <button class="btn ghost block" type="button" data-close>${esc(t('cancel'))}</button>
     </form>`, (el, close) => {
     let currency = S.room.currency, mode = S.room.mode;
     el.addEventListener('click', (e) => {
@@ -663,8 +680,8 @@ function settingsModal() {
     el.querySelector('form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      try { await act('settings', { title: fd.get('title'), roundLabel: fd.get('roundLabel'), currency, mode }); close(); toast('Saved ✅'); }
-      catch (err) { toast(err.message); }
+      try { await act('settings', { title: fd.get('title'), roundLabel: fd.get('roundLabel'), currency, mode }); close(); toast(t('saved')); }
+      catch (err) { toastErr(err); }
     };
   });
 }
@@ -674,58 +691,59 @@ function shareResults() {
   const s = computeRoundStats(r, S.room.players, S.room.mode);
   const medals = ['🥇', '🥈', '🥉'];
   const lines = [
-    `♛ CheckMate — ${S.room.title} (${r.label})`,
-    `Real bill: ${fmtMoney(s.actual, cur())} · Group average: ${fmtMoney(Math.round(s.average), cur())} (${fmtPct(s.avgPct)})`,
+    t('shareHeader', { title: S.room.title, label: r.label }),
+    t('shareLine', { real: fmtMoney(s.actual, cur()), avg: fmtMoney(Math.round(s.average), cur()), pct: fmtPct(s.avgPct) }),
     '',
     ...s.rows.map((x, i) => `${medals[i] || `${i + 1}.`} ${x.avatar} ${x.name} — ${fmtMoney(x.amount, cur())} (${fmtPct(x.pct)}) ${x.verdict.emoji}`),
     '',
-    ...s.awards.filter(a => ['farthest', 'fastest', 'bigspender', 'cheapskate'].includes(a.key)).map(a => `${a.emoji} ${a.title}: ${a.who.name}`),
+    ...s.awards.filter(a => ['farthest', 'fastest', 'bigspender', 'cheapskate'].includes(a.key)).map(a => `${a.emoji} ${t('awards.' + a.type)}: ${a.who.name}`),
   ];
   const text = lines.join('\n');
-  if (navigator.share) navigator.share({ title: 'CheckMate results', text }).catch(() => copy(text));
+  if (navigator.share) navigator.share({ title: t('shareTitle'), text }).catch(() => copy(text));
   else copy(text);
 }
 
 // ---------- events ----------
 function rememberTable() {
-  const list = (store.get('checkmate:recent') || []).filter(t => t.code !== S.code);
-  list.unshift({ code: S.code, title: S.room?.title || S.createOpts.title || 'Dinner' });
+  const list = (store.get('checkmate:recent') || []).filter(x => x.code !== S.code);
+  list.unshift({ code: S.code, title: S.room?.title || S.createOpts.title || t('defaultTitle') });
   store.set('checkmate:recent', list.slice(0, 8));
 }
 
 document.addEventListener('pointerdown', unlockAudio, { once: false, passive: true });
 
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('button, [data-go]');
-  if (!t || t.closest('.modal')) return;
+  const btn = e.target.closest('button, [data-go]');
+  if (!btn || btn.closest('.modal')) return;
 
-  if (t.dataset.go) { go(t.dataset.go); return; }
-  if (t.dataset.avatar) { S.profile.avatar = t.dataset.avatar; saveProfile(); render(); return; }
-  if (t.dataset.currency) { syncCreateForm(); S.createOpts.currency = t.dataset.currency; store.set('checkmate:currency', t.dataset.currency); render(); return; }
-  if (t.dataset.mode) { syncCreateForm(); S.createOpts.mode = t.dataset.mode; render(); return; }
-  if (t.dataset.react) {
+  if (btn.dataset.go) { go(btn.dataset.go); return; }
+  if (btn.dataset.avatar) { S.profile.avatar = btn.dataset.avatar; saveProfile(); render(); return; }
+  if (btn.dataset.currency) { syncCreateForm(); S.createOpts.currency = btn.dataset.currency; store.set('checkmate:currency', btn.dataset.currency); render(); return; }
+  if (btn.dataset.mode) { syncCreateForm(); S.createOpts.mode = btn.dataset.mode; render(); return; }
+  if (btn.dataset.react) {
     sfx.pop();
-    t.disabled = true; setTimeout(() => { t.disabled = false; }, 600); // gentle spam guard
-    act('react', { emoji: t.dataset.react }).catch(err => toast(err.message));
+    btn.disabled = true; setTimeout(() => { btn.disabled = false; }, 600); // gentle spam guard
+    act('react', { emoji: btn.dataset.react }).catch(toastErr);
     return;
   }
 
-  switch (t.dataset.action) {
+  switch (btn.dataset.action) {
     case 'join-code': {
       const code = document.getElementById('home-code').value.trim().toUpperCase();
-      if (code.length !== 4) { toast('Codes have 4 letters'); return; }
+      if (code.length !== 4) { toast(t('codeLen')); return; }
       const saved = store.get(sessionKey(code));
       if (saved) { S.code = code; S.session = saved; enterRoom(); } else openJoin(code);
       return;
     }
     case 'open-recent': {
-      const code = t.dataset.code;
+      const code = btn.dataset.code;
       const saved = store.get(sessionKey(code));
       S.code = code;
       if (saved) { S.session = saved; history.pushState({}, '', `/r/${code}`); enterRoom(); } else openJoin(code);
       return;
     }
     case 'leave': disconnect(); go('home'); return;
+    case 'lang': setLang(getLang() === 'he' ? 'en' : 'he'); render(); return;
     case 'mute': setMuted(!isMuted()); render(); return;
     case 'share': shareModal(); return;
     case 'profile': profileModal(); return;
@@ -737,18 +755,18 @@ document.addEventListener('click', async (e) => {
     }
     case 'cancel-edit': S.editingGuess = false; render(); return;
     case 'kick': {
-      const p = playerById(t.dataset.pid);
-      if (p && confirm(`Remove ${p.name} from the table?`)) act('kick', { target: p.id }).catch(err => toast(err.message));
+      const p = playerById(btn.dataset.pid);
+      if (p && confirm(t('kickConfirm', { name: p.name }))) act('kick', { target: p.id }).catch(toastErr);
       return;
     }
     case 'people': {
       const base = S.split.people ?? S.room.players.length;
-      S.split.people = Math.max(1, Math.min(60, base + Number(t.dataset.d)));
+      S.split.people = Math.max(1, Math.min(60, base + Number(btn.dataset.d)));
       render(); return;
     }
     case 'share-results': shareResults(); return;
     case 'next-round':
-      try { await act('next', { label: t.dataset.label }); } catch (err) { toast(err.message); }
+      try { await act('next', { label: btn.dataset.label }); } catch (err) { toastErr(err); }
       return;
   }
 });
@@ -760,7 +778,7 @@ document.addEventListener('input', (e) => {
   if (el.id === 'r-actual') S.draft.actual = el.value;
   if (el.id === 'c-name' || el.id === 'j-name') { S.profile.name = el.value; saveProfile(); }
   if (el.id === 'c-title') S.createOpts.title = el.value;
-  if (el.id === 'home-code') el.value = el.value.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  if (el.id === 'home-code') el.value = toCode(el.value);
   if (el.id === 'split-tip') { S.split.tip = Number(el.value); updateSplit(); }
 });
 
@@ -792,7 +810,7 @@ document.addEventListener('submit', async (e) => {
     switch (form.dataset.form) {
       case 'create': {
         S.profile.name = String(fd.get('name')).trim(); saveProfile();
-        const res = await api('/api/rooms', { name: S.profile.name, avatar: S.profile.avatar, title: fd.get('title'), currency: S.createOpts.currency, mode: S.createOpts.mode });
+        const res = await api('/api/rooms', { name: S.profile.name, avatar: S.profile.avatar, title: String(fd.get('title') || '').trim() || t('defaultTitle'), roundLabel: t('firstRound'), currency: S.createOpts.currency, mode: S.createOpts.mode });
         S.code = res.code; S.session = { pid: res.pid, token: res.token };
         store.set(sessionKey(res.code), S.session);
         history.pushState({}, '', `/r/${res.code}`);
@@ -805,13 +823,13 @@ document.addEventListener('submit', async (e) => {
         const res = await api(`/api/rooms/${S.code}/join`, { name: S.profile.name, avatar: S.profile.avatar });
         S.session = { pid: res.pid, token: res.token };
         store.set(sessionKey(S.code), S.session);
-        if (res.rejoined) toast('Welcome back! 👋');
+        if (res.rejoined) toast(t('welcomeBack'));
         enterRoom(); rememberTable();
         break;
       }
       case 'guess': {
         const amount = parseAmount(fd.get('amount'));
-        if (!(amount > 0)) { toast('Type a number first 🙂'); break; }
+        if (!(amount > 0)) { toast(t('typeNumber')); break; }
         await act('guess', { amount, quote: fd.get('quote') });
         S.editingGuess = false; S.draft.amount = ''; S.draft.quote = '';
         sfx.lock(); buzz(60);
@@ -821,17 +839,17 @@ document.addEventListener('submit', async (e) => {
       }
       case 'reveal': {
         const actual = parseAmount(fd.get('actual'));
-        if (!(actual > 0)) { toast('Type the real total from the receipt'); break; }
+        if (!(actual > 0)) { toast(t('typeReal')); break; }
         const r = round();
         const missing = S.room.players.filter(p => !r.guesses[p.id]);
-        if (missing.length && !confirm(`${missing.map(p => p.name).join(', ')} ${missing.length === 1 ? 'hasn’t' : 'haven’t'} guessed yet. Reveal anyway?`)) break;
+        if (missing.length && !confirm(t('confirmMissing', { names: missing.map(p => p.name).join(', '), count: missing.length }))) break;
         await act('reveal', { actual });
         S.draft.actual = '';
         break;
       }
     }
   } catch (err) {
-    toast(err.message);
+    toastErr(err);
   } finally {
     if (btn && btn.isConnected) btn.disabled = false;
   }
@@ -843,5 +861,6 @@ setInterval(() => {
   if (el) el.textContent = '⏱ ' + fmtDuration(Math.max(0, serverNow() - Number(el.dataset.timer)));
 }, 1000);
 
+applyLang();
 installTooltips();
 boot();

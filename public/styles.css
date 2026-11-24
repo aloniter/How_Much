@@ -175,6 +175,15 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .logo-icon { width: 128px; height: 128px; border-radius: 30px; display: block; margin: 0 auto 14px; box-shadow: 0 14px 34px rgba(0,0,0,.35); animation: bob 3s ease-in-out infinite; }
+.logo-icon.small { width: 84px; height: 84px; border-radius: 20px; margin-bottom: 10px; }
+.lang-row { display: flex; justify-content: flex-end; margin-bottom: -8px; }
+.lang-btn {
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px;
+  padding: 8px 14px; min-height: 40px; font-weight: 650; cursor: pointer; font-size: .9rem; white-space: nowrap;
+}
+.lang-btn.small-lang { padding: 6px 10px; min-height: 36px; font-size: .8rem; }
+.footer .link-lang { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font: inherit; }
+:root[dir="rtl"] body { font-family: system-ui, -apple-system, "Segoe UI", "Arial Hebrew", Arial, sans-serif; }
 .logo-emoji { font-size: 3.2rem; display: block; margin-bottom: 6px; animation: bob 3s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateY(-6px) rotate(-4deg); } }
 .tagline { color: var(--text-2); margin-top: 10px; font-size: 1.05rem; }
@@ -204,17 +213,17 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
 .player.done { border-color: color-mix(in srgb, var(--good) 60%, transparent); }
 .player.done .st { color: var(--good); font-weight: 600; }
 .player.me { outline: 2px solid var(--accent); outline-offset: -2px; }
-.player .dot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.player .dot { position: absolute; top: 8px; inset-inline-end: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .player .dot.on { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
 .player.thinking .av { animation: think 1.4s ease-in-out infinite; }
 @keyframes think { 50% { transform: rotate(-10deg) scale(1.05); } }
-.player .kick { position: absolute; top: 2px; left: 4px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .9rem; padding: 4px; }
+.player .kick { position: absolute; top: 2px; inset-inline-start: 4px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: .9rem; padding: 4px; }
 
 .progress { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .progress > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; transition: width .4s ease; }
 
 /* ---------- guessing ---------- */
-.money-input { position: relative; }
+.money-input { position: relative; direction: ltr; }
 .money-input .cur { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); font-size: 2rem; font-family: var(--font-display); color: var(--muted); pointer-events: none; }
 .money-input input {
   width: 100%; font-family: var(--font-display); font-size: 2.6rem; font-weight: 700;
@@ -257,17 +266,17 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
 .award .d { font-size: .8rem; color: var(--muted); }
 
 .rank-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
-.rank-table th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; padding: 0 6px 8px; }
+.rank-table th { text-align: start; font-size: .72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; padding: 0 6px 8px; }
 .rank-table td { padding: 10px 6px; border-top: 1px solid var(--line); vertical-align: top; }
-.rank-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.rank-table th.num { text-align: right; }
+.rank-table td.num { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rank-table th.num { text-align: end; }
 .rank-table .who { font-weight: 650; }
 .rank-table .vd { display: block; font-size: .78rem; color: var(--muted); font-weight: 500; }
 .rank-table .q { display: block; font-size: .8rem; color: var(--text-2); font-style: italic; margin-top: 2px; }
 .rank-table tr.me td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .pos { color: var(--over); } .neg { color: var(--under); }
 
-.chart { width: 100%; display: block; overflow: visible; }
+.chart { width: 100%; display: block; overflow: visible; direction: ltr; }
 .chart text { fill: var(--text-2); font-family: var(--font); font-size: 12px; }
 .chart .axis-label { fill: var(--muted); font-size: 11px; }
 .chart .grid { stroke: var(--grid); stroke-width: 1; }
@@ -284,7 +293,7 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
 .chart .accent { fill: var(--accent); font-weight: 700; }
 .chart .dot-ring { fill: var(--surface); stroke: var(--line); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--text-2); margin-top: 10px; }
-.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-inline-end: 6px; vertical-align: -1px; }
 .legend .ln { width: 16px; height: 0; border-top: 2px solid var(--text); border-radius: 0; vertical-align: 3px; }
 .legend .ln.avg { border-top: 2px dashed var(--accent); }
 
@@ -344,7 +353,7 @@ input.code { text-transform: uppercase; letter-spacing: 6px; text-align: center;
 .qr { background: #fff; border-radius: 16px; padding: 12px; width: min(260px, 70vw); margin: 0 auto; }
 .qr svg, .qr img { width: 100%; height: auto; display: block; }
 .big-code { font-family: var(--font-display); font-size: 2.6rem; letter-spacing: 10px; font-weight: 700; color: var(--accent); }
-.link-box { word-break: break-all; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .9rem; color: var(--text-2); }
+.link-box { direction: ltr; word-break: break-all; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .9rem; color: var(--text-2); }
 .seg { display: flex; background: var(--surface-2); border-radius: 14px; padding: 4px; gap: 4px; }
 .seg button { flex: 1; border: 0; background: transparent; border-radius: 10px; padding: 10px 8px; font-weight: 650; cursor: pointer; min-height: 44px; font-size: .9rem; }
 .seg button[aria-pressed="true"] { background: var(--surface); box-shadow: var(--shadow); color: var(--accent); }
@@ -362,3 +371,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   .kpi .v { font-size: 1.05rem; }
   .awards { grid-template-columns: 1fr 1fr; }
 }
+
+/* Hebrew has no capitals: drop the wide tracking used for English all-caps labels */
+:root[dir="rtl"] .bill-hero .lbl, :root[dir="rtl"] .kpi .k, :root[dir="rtl"] .rank-table th { letter-spacing: 0; text-transform: none; }
+:root[dir="rtl"] input.code::placeholder { letter-spacing: 2px; }

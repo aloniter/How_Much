@@ -65,9 +65,9 @@ test('leaderboard sums points over revealed rounds only', () => {
 });
 
 test('verdicts and median helpers', () => {
-  assert.equal(verdict(0.5).text, 'Human calculator');
-  assert.equal(verdict(-60).text, 'Has never paid a bill');
-  assert.equal(verdict(30).text, 'Thinks we ate lobster');
+  assert.equal(verdict(0.5).key, 'calc');
+  assert.equal(verdict(-60).key, 'neverPaid');
+  assert.equal(verdict(30).key, 'lobster');
   assert.equal(median([3, 1, 2]), 2);
   assert.equal(median([]), null);
 });

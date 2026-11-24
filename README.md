@@ -29,6 +29,7 @@ a leaderboard.
   Points per round: 🥇 5, 🥈 3, 🥉 2, everyone else 1, and +3 for a guess within 1%.
 - **Bill splitter** with a tip slider, plus a "farthest off buys dessert" rule 😈.
 - **Share the results** as text to the family WhatsApp group.
+- **English or Hebrew 🇬🇧🇮🇱.** Each phone chooses its own language, and Hebrew phones get Hebrew automatically. Hebrew switches the whole layout to right-to-left. You can switch any time from the home screen or the bottom of the game screen, and you can type the table code on a Hebrew keyboard without switching to English.
 - Works in light and dark mode and is built for phones first. If you refresh or switch phones, you keep your seat: join again with the same name.
 
 ## Run it
@@ -70,6 +71,7 @@ public/js/app.js     screens, live connection, reveal sequence
 public/js/stats.js   scoring, awards, leaderboard (shared with the tests)
 public/js/charts.js  hand-made SVG charts with tap tooltips
 public/js/fx.js      synthesized sounds, confetti, floating reactions
+public/js/i18n.js    English + Hebrew text, language switching, RTL
 public/vendor/       qrcode-generator (MIT)
 public/icon-*.png    app icon (also favicon / home-screen icon)
 test/                node:test suites

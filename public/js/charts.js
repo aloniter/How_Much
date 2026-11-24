@@ -1,19 +1,22 @@
 // Hand-rolled SVG charts (no dependencies). Every value is escaped before it joins markup.
-import { fmtDuration } from './stats.js';
+import { t, fmtDuration } from './i18n.js';
+
+// Wrap numbers in a left-to-right isolate so "−8.4%" or "₪1,200" never get scrambled inside Hebrew text.
+const LTR = (s) => `\u2066${s}\u2069`;
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function fmtMoney(v, cur = '') {
   if (v == null || !Number.isFinite(v)) return '—';
   const opts = Number.isInteger(Math.round(v * 100) / 100) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
-  return cur + v.toLocaleString(undefined, opts);
+  return LTR(cur + v.toLocaleString(undefined, opts));
 }
 export function fmtPct(p, signed = true) {
   if (p == null || !Number.isFinite(p)) return '—';
   const a = Math.abs(p);
   const s = a < 10 ? a.toFixed(1) : String(Math.round(a));
-  if (!signed) return s + '%';
-  return (p > 0 ? '+' : p < 0 ? '−' : '±') + s + '%';
+  if (!signed) return LTR(s + '%');
+  return LTR((p > 0 ? '+' : p < 0 ? '−' : '±') + s + '%');
 }
 const short = (name, n = 8) => (name.length > n ? name.slice(0, n - 1) + '…' : name);
 
@@ -57,7 +60,7 @@ export function numberLine(stats, cur, width) {
   const H = axisY + 40;
 
   const ticks = niceTicks(lo, hi, W < 400 ? 4 : 6);
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Number line of every guess against the real bill">`;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(t('ariaLine'))}">`;
   for (const t of ticks) {
     const tx = x(t);
     s += `<line class="grid" x1="${tx}" x2="${tx}" y1="${top}" y2="${axisY}"/>`;
@@ -70,13 +73,13 @@ export function numberLine(stats, cur, width) {
   s += `<line class="avg-line" x1="${mx}" x2="${mx}" y1="${top - 4}" y2="${axisY}"/>`;
   s += `<line class="actual-line" x1="${ax}" x2="${ax}" y1="${top - 10}" y2="${axisY + 4}"/>`;
   const anchor = (px) => (px < W * 0.2 ? 'start' : px > W * 0.8 ? 'end' : 'middle');
-  s += `<text class="strong" x="${ax}" y="${top - 16}" text-anchor="${anchor(ax)}">🧾 Real ${esc(fmtMoney(stats.actual, cur))}</text>`;
+  s += `<text class="strong" x="${ax}" y="${top - 16}" text-anchor="${anchor(ax)}">${esc(t('chartReal', { x: fmtMoney(stats.actual, cur) }))}</text>`;
   const avgLabelClash = Math.abs(mx - ax) < 90;
-  s += `<text class="accent" x="${mx}" y="${avgLabelClash ? axisY + 34 : top - 16}" text-anchor="${anchor(mx)}">avg ${esc(fmtMoney(stats.average, cur))}</text>`;
+  s += `<text class="accent" x="${mx}" y="${avgLabelClash ? axisY + 34 : top - 16}" text-anchor="${anchor(mx)}">${esc(t('chartAvg', { x: fmtMoney(stats.average, cur) }))}</text>`;
 
   for (const { r, px, lane } of placed) {
     const cy = axisY - 36 - lane * laneH;
-    const tip = `${r.name}: ${fmtMoney(r.amount, cur)} (${fmtPct(r.pct)})`;
+    const tip = t('tipGuess', { name: r.name, amount: fmtMoney(r.amount, cur), pct: fmtPct(r.pct) });
     s += `<g data-tip="${esc(tip)}">`;
     s += `<line class="grid" x1="${px}" x2="${px}" y1="${cy + 14}" y2="${axisY}" stroke-dasharray="2 3"/>`;
     s += `<circle class="dot-ring" cx="${px}" cy="${cy - 4}" r="15"/>`;
@@ -100,16 +103,18 @@ export function errorBars(stats, cur, width, meId) {
   const zero = (plotL + plotR) / 2;
   const scale = (plotR - plotL) / 2 / maxAbs;
 
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="How far over or under the real bill each person was">`;
-  s += `<text class="axis-label" x="${zero - 6}" y="14" text-anchor="end">◀ too low</text>`;
-  s += `<text class="axis-label" x="${zero + 6}" y="14">too high ▶</text>`;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(t('ariaError'))}">`;
+  s += `<text class="axis-label" x="${zero - 6}" y="14" text-anchor="end">${esc(t('chartLow'))}</text>`;
+  s += `<text class="axis-label" x="${zero + 6}" y="14">${esc(t('chartHigh'))}</text>`;
   s += `<line class="actual-line" x1="${zero}" x2="${zero}" y1="${top - 4}" y2="${H - 4}"/>`;
   rows.forEach((r, i) => {
     const cy = top + i * rowH + rowH / 2;
     const len = Math.max(2, r.absPct * scale);
     const isOver = r.diff > 0;
     const bx = isOver ? zero + 1 : zero - 1 - len;
-    const tip = `${r.name}: guessed ${fmtMoney(r.amount, cur)}, ${r.diff === 0 ? 'exactly right!' : `${fmtMoney(r.absDiff, cur)} ${isOver ? 'over' : 'under'} (${fmtPct(r.pct)})`}`;
+    const tip = r.diff === 0
+      ? t('tipErrExact', { name: r.name, amount: fmtMoney(r.amount, cur) })
+      : t('tipErr', { name: r.name, amount: fmtMoney(r.amount, cur), diff: fmtMoney(r.absDiff, cur), over: isOver, pct: fmtPct(r.pct) });
     s += `<g data-tip="${esc(tip)}">`;
     s += `<text x="0" y="${cy + 5}" class="${r.pid === meId ? 'strong' : ''}">${esc(r.rank)}. ${esc(r.avatar)} ${esc(short(r.name, Math.floor(labelW / 9)))}</text>`;
     s += `<rect class="${isOver ? 'bar-over' : 'bar-under'}" x="${bx}" y="${cy - 8}" width="${len}" height="16" rx="4"/>`;
@@ -131,12 +136,12 @@ export function speedBars(stats, width) {
   const max = Math.max(1000, ...rows.map(r => r.firstTimeMs));
   const plotL = labelW + 8, plotR = W - 56;
   const scale = (plotR - plotL) / max;
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="How fast each person answered">`;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(t('ariaSpeed'))}">`;
   rows.forEach((r, i) => {
     const cy = top + i * rowH + rowH / 2;
     const len = Math.max(3, r.firstTimeMs * scale);
     const medal = i === 0 ? '⚡ ' : '';
-    s += `<g data-tip="${esc(`${r.name} answered after ${fmtDuration(r.firstTimeMs)}${r.changes ? ` (then changed it ${r.changes}×)` : ''}`)}">`;
+    s += `<g data-tip="${esc(t('tipSpeed', { name: r.name, t: fmtDuration(r.firstTimeMs) }) + (r.changes ? t('tipChanged', { n: r.changes }) : ''))}">`;
     s += `<text x="0" y="${cy + 5}">${esc(r.avatar)} ${esc(short(r.name, Math.floor(labelW / 9)))}</text>`;
     s += `<rect class="bar-speed" x="${plotL}" y="${cy - 8}" width="${len}" height="16" rx="4"/>`;
     s += `<text class="val" x="${plotL + len + 6}" y="${cy + 4}">${esc(medal + fmtDuration(r.firstTimeMs))}</text>`;
@@ -155,14 +160,14 @@ export function pointsBars(board, width) {
   const max = Math.max(1, ...board.map(b => b.points));
   const plotL = labelW + 8, plotR = W - 70;
   const scale = (plotR - plotL) / max;
-  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Total points across all rounds">`;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(t('ariaPoints'))}">`;
   board.forEach((b, i) => {
     const cy = top + i * rowH + rowH / 2;
     const len = Math.max(3, b.points * scale);
-    s += `<g data-tip="${esc(`${b.name}: ${b.points} pts · ${b.wins} win${b.wins === 1 ? '' : 's'} · rounds: ${b.perRound.join(' / ')}`)}">`;
+    s += `<g data-tip="${esc(t('tipPoints', { name: b.name, points: b.points, wins: b.wins, rounds: b.perRound.join(' / ') }))}">`;
     s += `<text x="0" y="${cy + 5}">${i === 0 ? '👑' : esc(i + 1 + '.')} ${esc(b.avatar)} ${esc(short(b.name, Math.floor(labelW / 9) - 2))}</text>`;
     s += `<rect class="bar-speed" x="${plotL}" y="${cy - 8}" width="${len}" height="16" rx="4"/>`;
-    s += `<text class="val" x="${plotL + len + 6}" y="${cy + 4}">${esc(b.points)} pts</text>`;
+    s += `<text class="val" x="${plotL + len + 6}" y="${cy + 4}">${esc(t('pts', { n: b.points }))}</text>`;
     s += `<rect class="hit" x="0" y="${cy - rowH / 2}" width="${W}" height="${rowH}"/>`;
     s += `</g>`;
   });

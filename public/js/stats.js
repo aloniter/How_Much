@@ -12,17 +12,17 @@ export function median(values) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-/** A funny one-liner based on how far (and which way) someone was off. */
+/** A funny one-liner (translation key) based on how far, and which way, someone was off. */
 export function verdict(pct) {
   const a = Math.abs(pct);
   const under = pct < 0;
-  if (a < 1) return { emoji: '🎯', text: 'Human calculator' };
-  if (a < 3) return { emoji: '🦅', text: 'Eagle eye' };
-  if (a < 7) return { emoji: '😎', text: 'Pretty sharp' };
-  if (a < 15) return { emoji: '🙂', text: 'Not bad at all' };
-  if (a < 25) return under ? { emoji: '🧾', text: 'Forgot about the drinks' } : { emoji: '🍾', text: 'Ordered imaginary champagne' };
-  if (a < 50) return under ? { emoji: '🕰️', text: 'Living on 2015 prices' } : { emoji: '🦞', text: 'Thinks we ate lobster' };
-  return under ? { emoji: '🧒', text: 'Has never paid a bill' } : { emoji: '🤑', text: 'Wants to buy the restaurant' };
+  if (a < 1) return { emoji: '🎯', key: 'calc' };
+  if (a < 3) return { emoji: '🦅', key: 'eagle' };
+  if (a < 7) return { emoji: '😎', key: 'sharp' };
+  if (a < 15) return { emoji: '🙂', key: 'notbad' };
+  if (a < 25) return under ? { emoji: '🧾', key: 'drinks' } : { emoji: '🍾', key: 'champagne' };
+  if (a < 50) return under ? { emoji: '🕰️', key: 'prices2015' } : { emoji: '🦞', key: 'lobster' };
+  return under ? { emoji: '🧒', key: 'neverPaid' } : { emoji: '🤑', key: 'buyRestaurant' };
 }
 
 /**
@@ -73,34 +73,34 @@ export function computeRoundStats(round, players, mode = 'classic') {
   const crowdBeats = average == null ? 0 : rows.filter(r => r.absDiff > Math.abs(avgDiff)).length;
   const meanAbsPct = n ? rows.reduce((s, r) => s + r.absPct, 0) / n : null;
 
+  // Each award: { key (unique), type (translation key), emoji, who, detail: {key, vars} }
   const awards = [];
+  const add = (type, emoji, who, detailKey, vars = {}, key = type) => awards.push({ key, type, emoji, who, detail: { key: detailKey, vars } });
   if (n) {
     const pick = (cmp) => [...rows].sort(cmp)[0];
     const winner = rows[0];
-    if (!winner.busted) awards.push({ key: 'closest', emoji: '🏆', title: 'Closest guess', who: winner, detail: offText(winner) });
+    if (!winner.busted) add('closest', '🏆', winner, ...offDetail(winner));
     if (n > 1) {
       const worst = pick((a, b) => b.absDiff - a.absDiff);
-      awards.push({ key: 'farthest', emoji: '🤡', title: 'Farthest off', who: worst, detail: offText(worst) });
+      add('farthest', '🤡', worst, ...offDetail(worst));
       const fast = pick((a, b) => a.firstTimeMs - b.firstTimeMs);
-      awards.push({ key: 'fastest', emoji: '⚡', title: 'Fastest finger', who: fast, detail: `answered in ${fmtDuration(fast.firstTimeMs)}` });
+      add('fastest', '⚡', fast, 'answeredIn', { ms: fast.firstTimeMs });
       const slow = pick((a, b) => b.firstTimeMs - a.firstTimeMs);
-      if (slow.pid !== fast.pid) awards.push({ key: 'slowest', emoji: '🐢', title: 'Still reading the menu', who: slow, detail: `took ${fmtDuration(slow.firstTimeMs)}` });
+      if (slow.pid !== fast.pid) add('slowest', '🐢', slow, 'took', { ms: slow.firstTimeMs });
       const high = pick((a, b) => b.amount - a.amount);
-      awards.push({ key: 'bigspender', emoji: '💸', title: 'Big spender', who: high, detail: 'highest guess' });
+      add('bigspender', '💸', high, 'highest');
       const low = pick((a, b) => a.amount - b.amount);
-      if (low.pid !== high.pid) awards.push({ key: 'cheapskate', emoji: '🪙', title: 'Cheapskate', who: low, detail: 'lowest guess' });
+      if (low.pid !== high.pid) add('cheapskate', '🪙', low, 'lowest');
       const flip = pick((a, b) => b.changes - a.changes);
-      if (flip.changes >= 1) awards.push({ key: 'flipflop', emoji: '🔄', title: 'Flip-flopper', who: flip, detail: `changed their mind ${flip.changes}×` });
+      if (flip.changes >= 1) add('flipflop', '🔄', flip, 'changed', { n: flip.changes });
       if (n >= 3) {
         const mid = pick((a, b) => Math.abs(a.amount - average) - Math.abs(b.amount - average));
-        awards.push({ key: 'average', emoji: '😐', title: 'Most average person', who: mid, detail: 'closest to the group average' });
+        add('average', '😐', mid, 'closestAvg');
       }
     }
-    for (const r of rows.filter(r => r.bullseye)) {
-      awards.push({ key: 'bullseye-' + r.pid, emoji: '🎯', title: 'Bullseye!', who: r, detail: `within ${BULLSEYE_PCT}% (+${BULLSEYE_BONUS} bonus)` });
-    }
+    for (const r of rows.filter(r => r.bullseye)) add('bullseye', '🎯', r, 'within', { p: BULLSEYE_PCT, b: BULLSEYE_BONUS }, 'bullseye-' + r.pid);
     if (mode === 'nover') {
-      for (const r of rows.filter(r => r.busted)) awards.push({ key: 'bust-' + r.pid, emoji: '💥', title: 'Busted', who: r, detail: 'went over the bill' });
+      for (const r of rows.filter(r => r.busted)) add('busted', '💥', r, 'wentOver', {}, 'bust-' + r.pid);
     }
   }
 
@@ -139,14 +139,7 @@ export function leaderboard(rounds, players, mode = 'classic') {
   return Object.values(totals).filter(t => t.played).sort((a, b) => b.points - a.points || b.wins - a.wins);
 }
 
-export function fmtDuration(ms) {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return `${m}m ${String(s % 60).padStart(2, '0')}s`;
-}
-
-function offText(r) {
-  if (r.diff === 0) return 'EXACTLY right 🤯';
-  return `${r.diff > 0 ? 'over' : 'under'} by ${r.absPct < 10 ? r.absPct.toFixed(1) : Math.round(r.absPct)}%`;
+function offDetail(r) {
+  if (r.diff === 0) return ['exact'];
+  return [r.diff > 0 ? 'over' : 'under', { pct: r.absPct }];
 }
