@@ -44,6 +44,7 @@ export function computeRoundStats(round, players, mode = 'classic') {
         name: byId[pid].name,
         avatar: byId[pid].avatar,
         amount: g.amount,
+        firstAmount: g.firstAmount ?? g.amount,
         diff,
         absDiff: Math.abs(diff),
         pct,

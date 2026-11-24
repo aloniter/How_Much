@@ -1,4 +1,7 @@
-# One-click deploy on Render (https://render.com) — free plan is enough for a dinner table.
+# One-click deploy on Render (https://render.com).
+# Free plan: works out of the box, but Render's free disk is wiped on every redeploy/restart —
+# use the Hall of Fame "Download backup" button and restore it from the home screen if that happens.
+# To keep the family history automatically, switch to a paid instance and uncomment the disk below.
 services:
   - type: web
     name: checkmate
@@ -8,3 +11,11 @@ services:
     startCommand: node server.js
     healthCheckPath: /healthz
     autoDeploy: true
+    envVars:
+      - key: DATA_DIR
+        value: ./data
+    # disk:
+    #   name: checkmate-data
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    # (and set DATA_DIR to /var/data)

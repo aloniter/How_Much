@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
-process.env.DATA_FILE = path.join(os.tmpdir(), `checkmate-test-${process.pid}.json`);
+process.env.DATA_DIR = path.join(os.tmpdir(), `checkmate-test-${process.pid}`);
 const require = createRequire(import.meta.url);
 const { server } = require('../server.js');
 

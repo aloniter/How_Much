@@ -63,6 +63,21 @@ export const sfx = {
     noiseHit(0, 0.5);
     [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.02 + i * 0.07, 0.9, 'triangle', 0.14));
   },
+  whoosh() {
+    if (!ctx || muted) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(300, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(900, ctx.currentTime + 0.18);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+    o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.3);
+  },
+  rimshot() { noiseHit(0, 0.35); noiseHit(0.14, 0.3); tone(180, 0.26, 0.08, 'triangle', 0.12); noiseHit(0.3, 0.45); },
+  siren() {
+    for (let i = 0; i < 3; i++) { tone(720, i * 0.5, 0.25, 'sawtooth', 0.05); tone(540, i * 0.5 + 0.25, 0.25, 'sawtooth', 0.05); }
+  },
   sad() { tone(392, 0, 0.3, 'sawtooth', 0.06); tone(370, 0.3, 0.3, 'sawtooth', 0.06); tone(349, 0.6, 0.7, 'sawtooth', 0.06); },
 };
 

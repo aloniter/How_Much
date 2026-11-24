@@ -198,3 +198,104 @@ export function installTooltips() {
   document.addEventListener('pointerdown', show);
   document.addEventListener('scroll', () => tip.classList.remove('show'), { passive: true });
 }
+
+// ---------- Hall of Fame charts ----------
+
+/** Ranked horizontal bars (one series). items: {label, value, text, tip} */
+export function hbarChart(items, width, { aria = '', cls = 'bar-speed' } = {}) {
+  const W = Math.max(280, width);
+  const labelW = Math.min(140, W * 0.36);
+  const rowH = 34, top = 6;
+  const H = top + items.length * rowH + 4;
+  const max = Math.max(1e-9, ...items.map(i => i.value));
+  const plotL = labelW + 8, plotR = W - 64;
+  const scale = (plotR - plotL) / max;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(aria)}">`;
+  items.forEach((it, i) => {
+    const cy = top + i * rowH + rowH / 2;
+    const len = Math.max(3, it.value * scale);
+    s += `<g data-tip="${esc(it.tip || '')}">`;
+    s += `<text x="0" y="${cy + 5}">${esc(short(it.label, Math.floor(labelW / 8.5)))}</text>`;
+    s += `<rect class="${cls} grow-x" style="animation-delay:${i * 60}ms" x="${plotL}" y="${cy - 8}" width="${len}" height="16" rx="4"/>`;
+    s += `<text class="val" x="${plotL + len + 6}" y="${cy + 4}">${esc(it.text)}</text>`;
+    s += `<rect class="hit" x="0" y="${cy - rowH / 2}" width="${W}" height="${rowH}"/>`;
+    s += `</g>`;
+  });
+  return s + '</svg>';
+}
+
+/** Diverging bars around zero: under (left, blue) vs over (right, red). items: {label, value(signed %), tip} */
+export function divergingChart(items, width, { aria = '', low = '', high = '' } = {}) {
+  const W = Math.max(280, width);
+  const labelW = Math.min(130, W * 0.34);
+  const rowH = 34, top = 24;
+  const H = top + items.length * rowH + 6;
+  const maxAbs = Math.max(5, ...items.map(i => Math.abs(i.value))) * 1.2;
+  const plotL = labelW + 8, plotR = W - 8;
+  const zero = (plotL + plotR) / 2;
+  const scale = (plotR - plotL) / 2 / maxAbs;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(aria)}">`;
+  s += `<text class="axis-label" x="${zero - 6}" y="13" text-anchor="end">${esc(low)}</text>`;
+  s += `<text class="axis-label" x="${zero + 6}" y="13">${esc(high)}</text>`;
+  s += `<line class="actual-line" x1="${zero}" x2="${zero}" y1="${top - 4}" y2="${H - 2}"/>`;
+  items.forEach((it, i) => {
+    const cy = top + i * rowH + rowH / 2;
+    const len = Math.max(2, Math.abs(it.value) * scale);
+    const over = it.value > 0;
+    s += `<g data-tip="${esc(it.tip || '')}">`;
+    s += `<text x="0" y="${cy + 5}">${esc(short(it.label, Math.floor(labelW / 9)))}</text>`;
+    s += `<rect class="${over ? 'bar-over' : 'bar-under'} ${over ? 'grow-x' : 'grow-x-rev'}" style="animation-delay:${i * 60}ms" x="${over ? zero + 1 : zero - 1 - len}" y="${cy - 8}" width="${len}" height="16" rx="4"/>`;
+    s += `<text class="val" x="${over ? zero + len + 6 : zero - len - 6}" y="${cy + 4}" text-anchor="${over ? 'start' : 'end'}">${esc(fmtPct(it.value))}</text>`;
+    s += `<rect class="hit" x="0" y="${cy - rowH / 2}" width="${W}" height="${rowH}"/>`;
+    s += `</g>`;
+  });
+  return s + '</svg>';
+}
+
+/** Vertical bars over time (e.g. every bill). items: {value, label, tip} in chronological order */
+export function columnChart(items, width, cur, { aria = '' } = {}) {
+  const W = Math.max(280, width);
+  const H = 190, padT = 14, padB = 26, padL = 46, padR = 6;
+  const max = Math.max(1, ...items.map(i => i.value)) * 1.1;
+  const ticks = niceTicks(0, max, 4);
+  const y = v => padT + (1 - v / max) * (H - padT - padB);
+  const slot = (W - padL - padR) / Math.max(1, items.length);
+  const bw = Math.max(4, Math.min(34, slot - 4));
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(aria)}">`;
+  for (const t of ticks) {
+    s += `<line class="grid" x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}"/>`;
+    s += `<text class="axis-label" x="${padL - 6}" y="${y(t) + 4}" text-anchor="end">${esc(compact(t, cur))}</text>`;
+  }
+  s += `<line class="axis" x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}"/>`;
+  const every = Math.ceil(items.length / Math.max(1, Math.floor((W - padL) / 54)));
+  items.forEach((it, i) => {
+    const cx = padL + slot * i + slot / 2;
+    const top = y(it.value);
+    s += `<g data-tip="${esc(it.tip || '')}">`;
+    s += `<rect class="bar-speed grow-y" style="animation-delay:${i * 40}ms" x="${cx - bw / 2}" y="${top}" width="${bw}" height="${Math.max(2, y(0) - top)}" rx="4"/>`;
+    if (i % every === 0) s += `<text class="axis-label" x="${cx}" y="${H - 8}" text-anchor="middle">${esc(it.label)}</text>`;
+    s += `<rect class="hit" x="${cx - slot / 2}" y="${padT}" width="${slot}" height="${H - padT - padB}"/>`;
+    s += `</g>`;
+  });
+  return s + '</svg>';
+}
+
+/** A person's miss % over time: line + dots (wins highlighted). points: {value, win, tip} */
+export function trendChart(points, width, { aria = '' } = {}) {
+  const W = Math.max(280, width);
+  const H = 150, padT = 12, padB = 18, padL = 40, padR = 12;
+  const max = Math.max(10, ...points.map(p => p.value)) * 1.1;
+  const x = i => padL + (points.length === 1 ? (W - padL - padR) / 2 : i * (W - padL - padR) / (points.length - 1));
+  const y = v => padT + (1 - v / max) * (H - padT - padB);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(aria)}">`;
+  for (const t of niceTicks(0, max, 3)) {
+    s += `<line class="grid" x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}"/>`;
+    s += `<text class="axis-label" x="${padL - 6}" y="${y(t) + 4}" text-anchor="end">${esc(Math.round(t) + '%')}</text>`;
+  }
+  if (points.length > 1) s += `<polyline class="trend-line draw" points="${points.map((p, i) => `${x(i)},${y(p.value)}`).join(' ')}"/>`;
+  points.forEach((p, i) => {
+    s += `<g data-tip="${esc(p.tip || '')}"><circle class="${p.win ? 'trend-win' : 'trend-dot'}" cx="${x(i)}" cy="${y(p.value)}" r="${p.win ? 6 : 4}"/>`;
+    s += `<rect class="hit" x="${x(i) - 14}" y="${padT}" width="28" height="${H - padT - padB}"/></g>`;
+  });
+  return s + '</svg>';
+}
