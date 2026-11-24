@@ -146,6 +146,8 @@ function viewFor(row, pid) {
     familyCode: room.familyCode || null,
     familyName: room.familyCode ? room.familyName : null,
     familyRev: room.familyRev || 0,
+    // family members at a family table get the family key on their phone (same rule as joining one)
+    familyKey: room.familyKey && room.players[pid]?.memberId ? room.familyKey : null,
     you: pid,
     serverNow: now(),
     players: Object.values(room.players).map(p => ({
@@ -539,6 +541,7 @@ async function roomApi(req, res, parts, url) {
       familyCode: fam ? fam.code : null,
       familyName: fam ? fam.name : null,
       familyRev: fam ? fam.rev : 0,
+      familyKey: fam ? fam.key : null,
       title: cleanText(body.title, 40) || 'Family dinner',
       currency: cleanText(body.currency, 4) || '$',
       mode: body.mode === 'nover' ? 'nover' : 'classic',

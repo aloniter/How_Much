@@ -157,6 +157,13 @@ function connect() {
     S.room = data;
     if (!data.players.some(p => p.id === S.session.pid)) { kicked(); return; }
     for (const r of data.rounds) if (r.actual != null) S.reactCounts[r.n] = r.reactions || {};
+    const mine = data.players.find(p => p.id === S.session.pid);
+    if (data.familyKey && mine?.memberId) { // remember the family (and who I am in it) on this phone
+      const e = entryFor(data.familyCode);
+      if (!e || e.key !== data.familyKey || e.memberId !== mine.memberId) {
+        saveFamilyEntry({ code: data.familyCode, name: data.familyName, key: data.familyKey, memberId: mine.memberId, memberName: mine.name, memberAvatar: mine.avatar });
+      }
+    }
     syncFamily();
     onStateChange(prev, data);
     // ignore pure "who is online" ticks for heavy re-renders while typing
